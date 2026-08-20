@@ -56,6 +56,11 @@ from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from database import init_db, get_db, SessionLocal, AnalysisHistory
+from services.face_verification import (
+    get_face_verifier,
+    FaceVerificationResult,
+    DEFAULT_VERIFICATION_THRESHOLD,
+)
 
 # --- Logging Configuration ---
 logging.basicConfig(
@@ -166,10 +171,6 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-# Mock Database for Demo Purposes
-fake_users_db = {}
-
-
 class User(BaseModel):
     username: str
     email: Optional[str] = None
@@ -196,6 +197,18 @@ def verify_password(plain_password, hashed_password):
 
 def get_password_hash(password):
     return pwd_context.hash(password)
+
+
+# Pre-populated demo accounts for immediate access
+fake_users_db = {
+    "admin": {
+        "username": "admin",
+        "hashed_password": get_password_hash("admin123"),
+        "email": "admin@truthlens.ai",
+        "full_name": "TruthLens Admin",
+        "disabled": False,
+    }
+}
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
@@ -526,6 +539,22 @@ class PredictInput(BaseModel):
         return v_media_data
 
 
+def resolve_model_url(url: str) -> str:
+    """Fallback container hostnames to localhost if running outside Docker."""
+    import socket
+    for host, port in [
+        ("npr_deepfakedetection", "5001"),
+        ("universalfakedetect", "5004"),
+        ("cross_efficient_vit", "7001"),
+    ]:
+        if f"{host}:{port}" in url:
+            try:
+                socket.gethostbyname(host)
+            except socket.gaierror:
+                return url.replace(f"{host}:{port}", f"localhost:{port}")
+    return url
+
+
 # --- Helper Functions for Model Interaction and Ensembling ---
 def check_model_health_api(model_name: str, media_type: str) -> Dict[str, Any]:
     media_type_config = ALL_MODEL_CONFIGS.get("media_types", {}).get(media_type, {})
@@ -536,7 +565,7 @@ def check_model_health_api(model_name: str, media_type: str) -> Dict[str, Any]:
             "message": f"No health endpoint configured for model '{model_name}' of type '{media_type}'.",
         }
 
-    health_url = health_endpoints_for_type[model_name]
+    health_url = resolve_model_url(health_endpoints_for_type[model_name])
     try:
         response = requests.get(health_url, timeout=10)
         response.raise_for_status()
@@ -571,7 +600,7 @@ def query_model_api(
             "error": f"Model '{model_name}' not configured for media type '{media_type}'."
         }
 
-    model_predict_url = model_endpoints_for_type[model_name]
+    model_predict_url = resolve_model_url(model_endpoints_for_type[model_name])
     logger.info(
         f"Request {request_id}: Querying model '{model_name}' ({media_type}) at {model_predict_url}."
     )
@@ -967,10 +996,14 @@ async def analyze_single_media_for_compare(
         f"P(fake)={ensemble_prob_fake:.4f}, method='{actual_method_used}'"
     )
 
-    return build_authenticity_result(
-        ensemble_prob_fake=ensemble_prob_fake,
-        model_query_results=model_query_results,
-        threshold=threshold,
+    return (
+        build_authenticity_result(
+            ensemble_prob_fake=ensemble_prob_fake,
+            model_query_results=model_query_results,
+            threshold=threshold,
+        ),
+        file_contents,
+        media_type,
     )
 
 
@@ -1521,7 +1554,7 @@ async def detect_media_endpoint_api_form(
 
 
 # ---------------------------------------------------------------------------
-# TruthLens — Compare Endpoint
+# TruthLens — Compare Endpoint (Task 1 + Task 2)
 # ---------------------------------------------------------------------------
 
 @app.post("/analyze/compare", tags=["TruthLens"], response_model_exclude_none=True)
@@ -1543,22 +1576,28 @@ async def compare_media_authenticity(
         None,
         description="Ensemble method: 'voting', 'average', or 'stacking'. Defaults to configured value.",
     ),
+    face_threshold: Optional[float] = Form(
+        None,
+        description="Cosine similarity threshold for face verification. Defaults to 0.65.",
+    ),
 ):
     """
-    TruthLens — Multi-Source Authenticity Verification.
+    TruthLens — Multi-Source Authenticity & Face Identity Verification.
 
-    Independently analyzes BOTH the reference and suspected media files using
-    the SAME DeepSafe detection pipeline. Returns separate authenticity results
-    for each file.
+    1. Independently analyzes BOTH the reference and suspected media files using
+       the DeepSafe authenticity detection ensemble.
+    2. Independently detects faces in both files, extracts identity embeddings,
+       and computes multi-face cosine similarity matching.
 
     IMPORTANT:
-    - The reference file is NOT assumed to be genuine. It is independently analyzed.
-    - An AI-generated classification does NOT imply the media is a deepfake.
-    - This endpoint does NOT return a deepfake conclusion (that is Task 3).
+    - The reference file is NOT assumed to be genuine.
+    - AI-generated classification does NOT determine a deepfake verdict.
+    - Face verification determines whether the same identity is likely present.
 
     Returns:
-        reference_analysis: AuthenticityResult for the reference file
-        suspected_analysis: AuthenticityResult for the suspected file
+        reference_analysis: AuthenticityResult
+        suspected_analysis: AuthenticityResult
+        face_verification: FaceVerificationResult
     """
     req_id = request.state.request_id
     start_time = time.time()
@@ -1581,28 +1620,40 @@ async def compare_media_authenticity(
             else "voting"
         )
     )
+    final_face_threshold: float = (
+        face_threshold
+        if face_threshold is not None
+        else DEFAULT_VERIFICATION_THRESHOLD
+    )
 
     logger.info(
         f"Request {req_id}: /analyze/compare received. "
         f"reference='{reference_media.filename}', suspected='{suspected_media.filename}', "
-        f"threshold={final_threshold}, ensemble='{final_ensemble_method}'"
+        f"threshold={final_threshold}, ensemble='{final_ensemble_method}', "
+        f"face_threshold={final_face_threshold}"
     )
 
     # -----------------------------------------------------------------------
-    # Analyze reference and suspected media independently.
-    # Each goes through the IDENTICAL validation + inference + ensemble path.
-    # Errors are captured per-file so one failure does not hide the other.
+    # Step 1: Analyze reference and suspected media authenticity independently
     # -----------------------------------------------------------------------
     reference_result: Optional[Dict[str, Any]] = None
+    reference_bytes: Optional[bytes] = None
+    reference_type: Optional[str] = None
     reference_error: Optional[str] = None
 
     suspected_result: Optional[Dict[str, Any]] = None
+    suspected_bytes: Optional[bytes] = None
+    suspected_type: Optional[str] = None
     suspected_error: Optional[str] = None
 
     try:
-        reference_result = await analyze_single_media_for_compare(
+        (
+            reference_result,
+            reference_bytes,
+            reference_type,
+        ) = await analyze_single_media_for_compare(
             file=reference_media,
-            media_type="",  # inferred automatically from content-type / extension
+            media_type="",  # inferred automatically
             threshold=final_threshold,
             ensemble_method=final_ensemble_method,
             req_id=req_id,
@@ -1622,7 +1673,11 @@ async def compare_media_authenticity(
         await reference_media.close()
 
     try:
-        suspected_result = await analyze_single_media_for_compare(
+        (
+            suspected_result,
+            suspected_bytes,
+            suspected_type,
+        ) = await analyze_single_media_for_compare(
             file=suspected_media,
             media_type="",  # inferred automatically
             threshold=final_threshold,
@@ -1643,7 +1698,7 @@ async def compare_media_authenticity(
     finally:
         await suspected_media.close()
 
-    # If both analyses failed, return a 503.
+    # If both authenticity analyses failed, return 503
     if reference_result is None and suspected_result is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -1653,6 +1708,54 @@ async def compare_media_authenticity(
                 "suspected_error": suspected_error,
             },
         )
+
+    # -----------------------------------------------------------------------
+    # Step 2: Biometric Face Identity Verification (Task 2)
+    # -----------------------------------------------------------------------
+    face_verification_result: Optional[Dict[str, Any]] = None
+    try:
+        if reference_bytes and suspected_bytes:
+            ref_pil = Image.open(io.BytesIO(reference_bytes))
+            sus_pil = Image.open(io.BytesIO(suspected_bytes))
+
+            face_verifier = get_face_verifier()
+            verif_obj = face_verifier.verify_faces(
+                reference_image=ref_pil,
+                suspected_image=sus_pil,
+                threshold=final_face_threshold,
+            )
+            face_verification_result = verif_obj.model_dump()
+        else:
+            face_verification_result = {
+                "status": "unable_to_verify",
+                "reference_face_detected": False,
+                "suspected_face_detected": False,
+                "reference_faces_count": 0,
+                "suspected_faces_count": 0,
+                "best_match_score": None,
+                "best_match_face_index": None,
+                "match": None,
+                "result": "UNABLE_TO_VERIFY",
+                "threshold_used": final_face_threshold,
+                "message": "Face verification unavailable because one or both media files could not be processed.",
+            }
+    except Exception as face_err:
+        logger.warning(
+            f"Request {req_id}: Face verification encountered error: {face_err}"
+        )
+        face_verification_result = {
+            "status": "unable_to_verify",
+            "reference_face_detected": False,
+            "suspected_face_detected": False,
+            "reference_faces_count": 0,
+            "suspected_faces_count": 0,
+            "best_match_score": None,
+            "best_match_face_index": None,
+            "match": None,
+            "result": "UNABLE_TO_VERIFY",
+            "threshold_used": final_face_threshold,
+            "message": f"Face verification could not be completed: {str(face_err)}",
+        }
 
     total_processing_time = round(time.time() - start_time, 3)
 
@@ -1664,7 +1767,7 @@ async def compare_media_authenticity(
         "ensemble_method_used": final_ensemble_method,
     }
 
-    # Reference result
+    # Reference authenticity result
     if reference_result is not None:
         response_payload["reference_analysis"] = {
             "status": "completed",
@@ -1678,7 +1781,7 @@ async def compare_media_authenticity(
             "error": reference_error,
         }
 
-    # Suspected result
+    # Suspected authenticity result
     if suspected_result is not None:
         response_payload["suspected_analysis"] = {
             "status": "completed",
@@ -1692,10 +1795,14 @@ async def compare_media_authenticity(
             "error": suspected_error,
         }
 
+    # Face verification result (Task 2)
+    response_payload["face_verification"] = face_verification_result
+
     logger.info(
         f"Request {req_id}: /analyze/compare complete in {total_processing_time}s. "
         f"reference={response_payload['reference_analysis']['status']}, "
-        f"suspected={response_payload['suspected_analysis']['status']}"
+        f"suspected={response_payload['suspected_analysis']['status']}, "
+        f"face_verification={face_verification_result.get('result', 'N/A')}"
     )
 
     return response_payload

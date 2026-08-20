@@ -207,6 +207,136 @@ function AuthenticityCard({ title, analysis, previewUrl, mediaType }) {
 }
 
 // ---------------------------------------------------------------------------
+// FaceVerificationCard – displays Task 2 Face Identity Verification
+// ---------------------------------------------------------------------------
+function FaceVerificationCard({ faceVerification }) {
+    if (!faceVerification) return null;
+
+    const isMatch = faceVerification.match === true;
+    const isDifferent = faceVerification.match === false;
+    const isUnable = faceVerification.result === 'UNABLE_TO_VERIFY' || faceVerification.status !== 'completed';
+
+    const statusColor = isMatch ? 'var(--success)' : isDifferent ? 'var(--danger)' : '#f59e0b';
+    const statusIcon = isMatch ? '👤✅' : isDifferent ? '👥❌' : '⚠️';
+    const statusText = isMatch
+        ? 'LIKELY SAME PERSON'
+        : isDifferent
+            ? 'LIKELY DIFFERENT PERSON'
+            : 'UNABLE TO VERIFY';
+
+    const scorePct = faceVerification.best_match_score !== null && faceVerification.best_match_score !== undefined
+        ? (faceVerification.best_match_score * 100).toFixed(1)
+        : null;
+
+    const threshPct = faceVerification.threshold_used !== undefined
+        ? (faceVerification.threshold_used * 100).toFixed(0)
+        : '65';
+
+    return (
+        <div className="card" style={{ borderTop: `4px solid ${statusColor}`, marginTop: '1.5rem', padding: '1.5rem 2rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '1.25rem' }}>🔍</span>
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: '700', margin: 0, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                        Face Identity Verification
+                    </h3>
+                </div>
+                <span style={{
+                    fontSize: '0.75rem', fontWeight: '700', padding: '0.25rem 0.75rem', borderRadius: '999px',
+                    background: `${statusColor}20`, color: statusColor, border: `1px solid ${statusColor}40`,
+                    letterSpacing: '0.05em',
+                }}>
+                    TASK 2 · BIOMETRIC MATCH
+                </span>
+            </div>
+
+            {/* Verdict Box */}
+            <div style={{
+                textAlign: 'center', padding: '1.25rem', borderRadius: 'var(--radius-md)',
+                background: `${statusColor}12`, border: `1px solid ${statusColor}30`,
+                marginBottom: '1.5rem',
+            }}>
+                <div style={{ fontSize: '2rem', marginBottom: '0.25rem' }}>{statusIcon}</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: '800', color: statusColor, letterSpacing: '0.02em' }}>
+                    {statusText}
+                </div>
+                {faceVerification.message && (
+                    <p style={{ margin: '0.5rem 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                        {faceVerification.message}
+                    </p>
+                )}
+            </div>
+
+            {/* Metrics Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
+                {/* Reference Face */}
+                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Reference Face</div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: '600', color: faceVerification.reference_face_detected ? 'var(--success)' : '#f59e0b' }}>
+                        {faceVerification.reference_face_detected ? `✓ Detected (${faceVerification.reference_faces_count || 1} face)` : '✗ None Detected'}
+                    </div>
+                </div>
+
+                {/* Suspected Face */}
+                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Suspected Face(s)</div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: '600', color: faceVerification.suspected_face_detected ? 'var(--success)' : '#f59e0b' }}>
+                        {faceVerification.suspected_face_detected ? `✓ Detected (${faceVerification.suspected_faces_count || 1} face${faceVerification.suspected_faces_count > 1 ? 's' : ''})` : '✗ None Detected'}
+                    </div>
+                    {faceVerification.suspected_faces_count > 1 && faceVerification.best_match_face_index && (
+                        <div style={{ fontSize: '0.75rem', color: 'var(--accent-primary)', marginTop: '0.2rem' }}>
+                            Best match: Face #{faceVerification.best_match_face_index}
+                        </div>
+                    )}
+                </div>
+
+                {/* Similarity Score */}
+                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Face Similarity</div>
+                    <div style={{ fontSize: '1.25rem', fontWeight: '800', color: scorePct !== null ? statusColor : 'var(--text-secondary)' }}>
+                        {scorePct !== null ? `${scorePct}%` : 'N/A'}
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>
+                        Threshold: {threshPct}%
+                    </div>
+                </div>
+            </div>
+
+            {/* Similarity Progress Bar */}
+            {scorePct !== null && (
+                <div style={{ marginBottom: '1rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
+                        <span>Cosine Similarity Match</span>
+                        <span style={{ fontWeight: '600', color: statusColor }}>{scorePct}%</span>
+                    </div>
+                    <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: '999px', height: '8px', overflow: 'hidden', position: 'relative' }}>
+                        {/* Threshold indicator line */}
+                        <div style={{
+                            position: 'absolute', left: `${threshPct}%`, top: 0, bottom: 0, width: '2px',
+                            background: 'rgba(255,255,255,0.4)', zIndex: 2,
+                        }} title={`Threshold: ${threshPct}%`} />
+                        <div style={{
+                            width: `${scorePct}%`, height: '100%',
+                            background: isMatch ? 'var(--success)' : 'var(--danger)',
+                            borderRadius: '999px', transition: 'width 0.6s ease',
+                        }} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'rgba(148,163,184,0.5)', marginTop: '0.25rem' }}>
+                        <span>0% (Different)</span>
+                        <span>Threshold ({threshPct}%)</span>
+                        <span>100% (Identical)</span>
+                    </div>
+                </div>
+            )}
+
+            <p style={{ margin: '0.75rem 0 0', fontSize: '0.75rem', color: 'rgba(148,163,184,0.6)', textAlign: 'center', fontStyle: 'italic' }}>
+                Face verification provides a probabilistic similarity assessment and does not constitute definitive proof of identity.
+            </p>
+        </div>
+    );
+}
+
+// ---------------------------------------------------------------------------
 // MediaUploadZone – reusable drop-zone for Compare Mode
 // ---------------------------------------------------------------------------
 function MediaUploadZone({ id, label, sublabel, file, preview, onFileChange, disabled }) {
@@ -596,8 +726,8 @@ function Dashboard({ onLogout }) {
                     )}
                 </div>
 
-                {/* Two-column results */}
-                <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+                {/* Two-column authenticity results (Task 1) */}
+                <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
                     <AuthenticityCard
                         title="Reference Media"
                         analysis={ref}
@@ -611,6 +741,11 @@ function Dashboard({ onLogout }) {
                         mediaType={suspectedFile?.type?.startsWith('video/') ? 'video' : 'image'}
                     />
                 </div>
+
+                {/* Face Identity Verification Section (Task 2) */}
+                <FaceVerificationCard
+                    faceVerification={compareResults.face_verification}
+                />
             </div>
         );
     };

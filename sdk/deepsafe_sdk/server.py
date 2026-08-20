@@ -180,3 +180,8 @@ def cli():
         uvicorn.run(app, host="0.0.0.0", port=port, workers=1)
     else:
         parser.print_help()
+
+
+if __name__ == "__main__":
+    cli()
+

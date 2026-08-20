@@ -10,6 +10,10 @@ __pycache__/
 node_modules/
 
 # Model weights (large files)
+*.pth
+*.pt
+models/**/weights/
+models/image/npr_deepfakedetection/npr_deepfakedetection/
 models/audio/vocoder_artifacts/models/*.pth
 models/audio/vocoder_artifacts/temp_repo/
 
