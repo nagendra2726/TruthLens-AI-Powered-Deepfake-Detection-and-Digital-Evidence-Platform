@@ -337,6 +337,212 @@ function FaceVerificationCard({ faceVerification }) {
 }
 
 // ---------------------------------------------------------------------------
+// AssessmentCard – displays Task 3 Intelligent Decision Engine result
+// ---------------------------------------------------------------------------
+const CATEGORY_META = {
+    POTENTIAL_DEEPFAKE: {
+        icon: '⚠️',
+        label: 'POTENTIAL DEEPFAKE',
+        color: 'var(--danger)',
+        badge: 'HIGH RISK',
+    },
+    LIKELY_AUTHENTIC: {
+        icon: '✅',
+        label: 'LIKELY AUTHENTIC',
+        color: 'var(--success)',
+        badge: 'LOW RISK',
+    },
+    BOTH_MEDIA_APPEAR_SYNTHETIC: {
+        icon: 'ℹ️',
+        label: 'BOTH MEDIA APPEAR SYNTHETIC',
+        color: '#f59e0b',
+        badge: 'MEDIUM RISK',
+    },
+    AI_GENERATED_MEDIA_DIFFERENT_PERSON: {
+        icon: '🔍',
+        label: 'AI-GENERATED MEDIA — DIFFERENT PERSON',
+        color: '#f59e0b',
+        badge: 'LOW / MEDIUM RISK',
+    },
+    SYNTHETIC_REFERENCE_AUTHENTIC_SUSPECTED: {
+        icon: 'ℹ️',
+        label: 'SYNTHETIC REFERENCE — AUTHENTIC SUSPECTED',
+        color: '#60a5fa',
+        badge: 'LOW RISK',
+    },
+    AUTHENTIC_MEDIA_DIFFERENT_PERSON: {
+        icon: '👥',
+        label: 'AUTHENTIC MEDIA — DIFFERENT PERSON',
+        color: 'var(--success)',
+        badge: 'LOW RISK',
+    },
+    INCONCLUSIVE: {
+        icon: '❓',
+        label: 'INCONCLUSIVE',
+        color: '#94a3b8',
+        badge: 'UNKNOWN RISK',
+    },
+    UNABLE_TO_VERIFY: {
+        icon: '🚫',
+        label: 'UNABLE TO VERIFY',
+        color: '#94a3b8',
+        badge: 'UNKNOWN RISK',
+    },
+};
+
+function SignalChip({ label, value, color }) {
+    return (
+        <div style={{
+            background: 'rgba(255,255,255,0.04)', borderRadius: '8px',
+            padding: '0.75rem 1rem', border: '1px solid rgba(255,255,255,0.08)',
+        }}>
+            <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: '0.25rem', letterSpacing: '0.05em' }}>{label}</div>
+            <div style={{ fontSize: '0.9rem', fontWeight: '700', color: color || 'var(--text-primary)' }}>{value}</div>
+        </div>
+    );
+}
+
+function AssessmentCard({ assessment }) {
+    if (!assessment) return null;
+
+    const meta = CATEGORY_META[assessment.category] || {
+        icon: '❓', label: assessment.category, color: '#94a3b8', badge: assessment.risk_level,
+    };
+    const { signals = {} } = assessment;
+
+    const authColor = (pred) => {
+        if (pred === 'LIKELY_REAL') return 'var(--success)';
+        if (pred === 'LIKELY_AI_GENERATED') return 'var(--danger)';
+        return '#94a3b8';
+    };
+    const authLabel = (pred) => {
+        if (pred === 'LIKELY_REAL') return '✓ Likely Real';
+        if (pred === 'LIKELY_AI_GENERATED') return '⚠ Likely AI-Generated';
+        return pred || '—';
+    };
+    const faceLabel = (f) => {
+        if (f === 'LIKELY_SAME_PERSON') return '✓ Likely Same Person';
+        if (f === 'LIKELY_DIFFERENT_PERSON') return '✗ Likely Different Person';
+        return '⚠ Unable to Verify';
+    };
+    const faceColor = (f) => {
+        if (f === 'LIKELY_SAME_PERSON') return 'var(--success)';
+        if (f === 'LIKELY_DIFFERENT_PERSON') return 'var(--danger)';
+        return '#f59e0b';
+    };
+    const confColor = (c) => c === 'HIGH' ? 'var(--success)' : c === 'MEDIUM' ? '#f59e0b' : '#94a3b8';
+    const simPct = signals.face_similarity_score != null
+        ? `${(signals.face_similarity_score * 100).toFixed(1)}%` : '—';
+    const aiPctRef = signals.reference_ai_probability != null
+        ? `${(signals.reference_ai_probability * 100).toFixed(1)}%` : '—';
+    const aiPctSus = signals.suspected_ai_probability != null
+        ? `${(signals.suspected_ai_probability * 100).toFixed(1)}%` : '—';
+
+    return (
+        <div className="card" style={{
+            borderTop: `4px solid ${meta.color}`,
+            marginTop: '1.5rem',
+            padding: '1.5rem 2rem',
+            background: `radial-gradient(ellipse at top left, ${meta.color}08 0%, transparent 70%)`,
+        }}>
+            {/* Header */}
+            <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem',
+                borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.75rem',
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '1.25rem' }}>🧠</span>
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: '700', margin: 0, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                        TruthLens Assessment
+                    </h3>
+                </div>
+                <span style={{
+                    fontSize: '0.75rem', fontWeight: '700', padding: '0.25rem 0.75rem',
+                    borderRadius: '999px', background: `${meta.color}20`,
+                    color: meta.color, border: `1px solid ${meta.color}40`, letterSpacing: '0.05em',
+                }}>TASK 3 · DECISION ENGINE</span>
+            </div>
+
+            {/* Verdict Box */}
+            <div style={{
+                textAlign: 'center', padding: '1.5rem', borderRadius: 'var(--radius-md)',
+                background: `${meta.color}12`, border: `1px solid ${meta.color}30`,
+                marginBottom: '1.5rem',
+            }}>
+                <div style={{ fontSize: '2.5rem', marginBottom: '0.35rem' }}>{meta.icon}</div>
+                <div style={{ fontSize: '1.5rem', fontWeight: '900', color: meta.color, letterSpacing: '0.02em', lineHeight: 1.2 }}>
+                    {meta.label}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+                    <span style={{
+                        fontSize: '0.8rem', fontWeight: '700', padding: '0.2rem 0.6rem',
+                        borderRadius: '999px', background: `${meta.color}20`, color: meta.color,
+                        border: `1px solid ${meta.color}30`,
+                    }}>Risk: {assessment.risk_level}</span>
+                    <span style={{
+                        fontSize: '0.8rem', fontWeight: '700', padding: '0.2rem 0.6rem',
+                        borderRadius: '999px', background: `${confColor(assessment.confidence)}20`,
+                        color: confColor(assessment.confidence), border: `1px solid ${confColor(assessment.confidence)}30`,
+                    }}>Confidence: {assessment.confidence}</span>
+                </div>
+            </div>
+
+            {/* Why section */}
+            <div style={{
+                background: 'rgba(255,255,255,0.04)', borderRadius: '8px',
+                padding: '1rem 1.25rem', marginBottom: '1.25rem',
+                border: '1px solid rgba(255,255,255,0.07)',
+            }}>
+                <div style={{ fontSize: '0.78rem', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: '0.5rem', letterSpacing: '0.05em' }}>
+                    📋 Why This Assessment?
+                </div>
+                <p style={{ margin: 0, fontSize: '0.9rem', lineHeight: 1.7, color: 'var(--text-primary)' }}>
+                    {assessment.explanation}
+                </p>
+            </div>
+
+            {/* Evidence Signals Grid */}
+            <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontSize: '0.78rem', textTransform: 'uppercase', color: 'var(--text-secondary)', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
+                    🔬 Evidence Signals
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '0.75rem' }}>
+                    <SignalChip
+                        label="Reference Media"
+                        value={authLabel(signals.reference_authenticity)}
+                        color={authColor(signals.reference_authenticity)}
+                    />
+                    <SignalChip
+                        label="Suspected Media"
+                        value={authLabel(signals.suspected_authenticity)}
+                        color={authColor(signals.suspected_authenticity)}
+                    />
+                    <SignalChip
+                        label="Face Verification"
+                        value={faceLabel(signals.face_verification)}
+                        color={faceColor(signals.face_verification)}
+                    />
+                    <SignalChip label="Face Similarity" value={simPct} color={meta.color} />
+                    <SignalChip label="Ref AI Probability" value={aiPctRef} color={authColor(signals.reference_authenticity)} />
+                    <SignalChip label="Sus AI Probability" value={aiPctSus} color={authColor(signals.suspected_authenticity)} />
+                </div>
+            </div>
+
+            {/* Disclaimer */}
+            <div style={{
+                marginTop: '1rem', padding: '0.75rem 1rem', borderRadius: '6px',
+                background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)',
+            }}>
+                <p style={{ margin: 0, fontSize: '0.73rem', color: 'rgba(148,163,184,0.6)', textAlign: 'center', fontStyle: 'italic', lineHeight: 1.5 }}>
+                    ⚖️ {assessment.disclaimer}
+                </p>
+            </div>
+        </div>
+    );
+}
+
+// ---------------------------------------------------------------------------
 // MediaUploadZone – reusable drop-zone for Compare Mode
 // ---------------------------------------------------------------------------
 function MediaUploadZone({ id, label, sublabel, file, preview, onFileChange, disabled }) {
@@ -745,6 +951,11 @@ function Dashboard({ onLogout }) {
                 {/* Face Identity Verification Section (Task 2) */}
                 <FaceVerificationCard
                     faceVerification={compareResults.face_verification}
+                />
+
+                {/* TruthLens Assessment Section (Task 3) */}
+                <AssessmentCard
+                    assessment={compareResults.assessment}
                 />
             </div>
         );

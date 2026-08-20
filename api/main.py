@@ -61,6 +61,7 @@ from services.face_verification import (
     FaceVerificationResult,
     DEFAULT_VERIFICATION_THRESHOLD,
 )
+from services.decision_engine import run_decision_engine
 
 # --- Logging Configuration ---
 logging.basicConfig(
@@ -1798,11 +1799,40 @@ async def compare_media_authenticity(
     # Face verification result (Task 2)
     response_payload["face_verification"] = face_verification_result
 
+    # -----------------------------------------------------------------------
+    # Step 3: Intelligent Decision Engine (Task 3)
+    # -----------------------------------------------------------------------
+    try:
+        assessment_obj = run_decision_engine(
+            reference_analysis=response_payload.get("reference_analysis"),
+            suspected_analysis=response_payload.get("suspected_analysis"),
+            face_verification=face_verification_result,
+        )
+        response_payload["assessment"] = assessment_obj.model_dump()
+        logger.info(
+            f"Request {req_id}: Decision Engine → category={assessment_obj.category} "
+            f"risk={assessment_obj.risk_level} confidence={assessment_obj.confidence}"
+        )
+    except Exception as de_err:
+        logger.warning(f"Request {req_id}: Decision Engine error: {de_err}")
+        response_payload["assessment"] = {
+            "category": "UNABLE_TO_VERIFY",
+            "risk_level": "UNKNOWN",
+            "confidence": "LOW",
+            "explanation": "The contextual assessment could not be completed due to an internal error.",
+            "signals": {},
+            "disclaimer": (
+                "This assessment is an AI-assisted forensic screening result and should not be "
+                "treated as definitive proof of manipulation, identity, or criminal activity."
+            ),
+        }
+
     logger.info(
         f"Request {req_id}: /analyze/compare complete in {total_processing_time}s. "
         f"reference={response_payload['reference_analysis']['status']}, "
         f"suspected={response_payload['suspected_analysis']['status']}, "
-        f"face_verification={face_verification_result.get('result', 'N/A')}"
+        f"face_verification={face_verification_result.get('result', 'N/A')}, "
+        f"assessment={response_payload['assessment'].get('category', 'N/A')}"
     )
 
     return response_payload
