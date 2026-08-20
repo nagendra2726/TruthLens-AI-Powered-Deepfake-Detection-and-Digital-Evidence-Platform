@@ -20,3 +20,5 @@ sdk/.venv/
 sdk/deepsafe_sdk.egg-info/
 docs/superpowers
 public_dataset
+*.db
+.pytest_cache/

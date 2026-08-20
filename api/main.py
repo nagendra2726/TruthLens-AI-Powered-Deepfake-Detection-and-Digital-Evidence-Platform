@@ -347,14 +347,16 @@ app.add_middleware(
 @app.middleware("http")
 async def request_id_and_size_limit_middleware(request: Request, call_next):
     request.state.request_id = str(uuid.uuid4())
-    if request.method == "POST" and request.url.path == "/predict":
+    # Apply payload size limit to /predict and /analyze/compare
+    size_limited_paths = ["/predict", "/analyze/compare"]
+    if request.method == "POST" and request.url.path in size_limited_paths:
         content_length_str = request.headers.get("content-length")
         if content_length_str:
             try:
                 content_length = int(content_length_str)
                 if content_length > MAX_GENERAL_PAYLOAD_SIZE_BYTES:
                     logger.warning(
-                        f"Request {request.state.request_id}: Payload size {content_length} exceeds limit {MAX_GENERAL_PAYLOAD_SIZE_BYTES} for /predict."
+                        f"Request {request.state.request_id}: Payload size {content_length} exceeds limit {MAX_GENERAL_PAYLOAD_SIZE_BYTES} for {request.url.path}."
                     )
                     return JSONResponse(
                         status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
@@ -738,6 +740,237 @@ def calculate_ensemble_verdict_api(
         base_real_votes,
         ensemble_prob_fake_score,
         actual_method_used,
+    )
+
+
+# ---------------------------------------------------------------------------
+# TruthLens — Multi-Source Authenticity Verification Helpers
+# ---------------------------------------------------------------------------
+
+def build_authenticity_result(
+    ensemble_prob_fake: float,
+    model_query_results: Dict[str, Dict],
+    threshold: float = 0.5,
+) -> Dict[str, Any]:
+    """
+    Convert raw ensemble output into a standardised AuthenticityResult.
+
+    The model probability is P(fake/AI-generated) — confirmed from
+    sdk/deepsafe_sdk/base.py::make_result().
+
+    Prediction labels:
+        LIKELY_AI_GENERATED  — ai_probability >= threshold AND outside INCONCLUSIVE band
+        LIKELY_REAL          — ai_probability < threshold AND outside INCONCLUSIVE band
+        INCONCLUSIVE         — |ai_probability - threshold| < 0.10
+
+    Confidence levels (distance from threshold):
+        VERY_HIGH  — distance >= 0.35
+        HIGH       — distance >= 0.20
+        MEDIUM     — distance >= 0.10
+        LOW        — distance <  0.10  (always INCONCLUSIVE zone)
+
+    NOTE: probabilities come directly from the model — never hardcoded.
+    """
+    ai_probability: float = round(float(ensemble_prob_fake), 6)
+    real_probability: float = round(1.0 - ai_probability, 6)
+    distance_from_threshold: float = abs(ai_probability - threshold)
+
+    # --- Confidence ---
+    if distance_from_threshold >= 0.35:
+        confidence = "VERY_HIGH"
+    elif distance_from_threshold >= 0.20:
+        confidence = "HIGH"
+    elif distance_from_threshold >= 0.10:
+        confidence = "MEDIUM"
+    else:
+        confidence = "LOW"
+
+    # --- Prediction ---
+    # INCONCLUSIVE when the model is uncertain (within ±10% of threshold)
+    if distance_from_threshold < 0.10:
+        prediction = "INCONCLUSIVE"
+    elif ai_probability >= threshold:
+        prediction = "LIKELY_AI_GENERATED"
+    else:
+        prediction = "LIKELY_REAL"
+
+    return {
+        "prediction": prediction,
+        "ai_probability": ai_probability,
+        "real_probability": real_probability,
+        "confidence": confidence,
+        "model_results": model_query_results,
+    }
+
+
+async def analyze_single_media_for_compare(
+    file: UploadFile,
+    media_type: str,
+    threshold: float,
+    ensemble_method: str,
+    req_id: str,
+    role: str,  # "reference" or "suspected" — for logging only
+) -> Dict[str, Any]:
+    """
+    Validate, base64-encode and run inference on a single uploaded file.
+    Returns an AuthenticityResult dict or raises HTTPException.
+
+    Reuses the IDENTICAL validation and inference pipeline as /detect:
+      - content-type / size check
+      - PIL image readability check
+      - query_model_api() for each configured model
+      - calculate_ensemble_verdict_api() for ensemble aggregation
+      - build_authenticity_result() for standardised output
+    """
+    content_type = file.content_type
+    inferred_media_type = CONTENT_TYPE_TO_MEDIA_TYPE_MAP.get(content_type)
+
+    # Fallback: infer media type from file extension (same logic as /detect)
+    if not inferred_media_type and file.filename:
+        ext = os.path.splitext(file.filename)[1].lower()
+        ext_to_media_type = {
+            ".jpg": "image", ".jpeg": "image", ".png": "image",
+            ".webp": "image", ".bmp": "image", ".gif": "image",
+            ".tiff": "image", ".tif": "image",
+            ".mp4": "video", ".avi": "video", ".mov": "video",
+            ".mkv": "video", ".m4v": "video",
+            ".wav": "audio", ".mp3": "audio", ".flac": "audio",
+            ".ogg": "audio", ".m4a": "audio",
+        }
+        inferred_media_type = ext_to_media_type.get(ext)
+        if inferred_media_type:
+            logger.info(
+                f"Request {req_id} [{role}]: Inferred media type '{inferred_media_type}' "
+                f"from extension '{ext}' (content_type was '{content_type}')."
+            )
+
+    if not inferred_media_type:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=(
+                f"{role.capitalize()} file '{file.filename}' has unsupported type "
+                f"'{content_type}'. Please upload a supported format."
+            ),
+        )
+
+    if media_type and inferred_media_type != media_type:
+        logger.warning(
+            f"Request {req_id} [{role}]: Inferred type '{inferred_media_type}' "
+            f"differs from requested '{media_type}'. Using inferred type."
+        )
+        media_type = inferred_media_type
+    elif not media_type:
+        media_type = inferred_media_type
+
+    file_contents = await file.read()
+    if not file_contents:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{role.capitalize()} file '{file.filename}' is empty.",
+        )
+
+    media_specific_config = (
+        ALL_MODEL_CONFIGS.get("media_types", {}) if ALL_MODEL_CONFIGS else {}
+    ).get(media_type, {})
+    max_size_for_type = media_specific_config.get(
+        "max_upload_size_bytes", MAX_GENERAL_PAYLOAD_SIZE_BYTES
+    )
+    if len(file_contents) > max_size_for_type:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=(
+                f"{role.capitalize()} file '{file.filename}' is too large for type "
+                f"'{media_type}' (max {max_size_for_type / (1024 * 1024):.1f}MB)."
+            ),
+        )
+
+    # Image readability validation (same as /detect)
+    if media_type == "image":
+        try:
+            img = Image.open(io.BytesIO(file_contents))
+            img.verify()
+            img = Image.open(io.BytesIO(file_contents))
+            if img.width < 32 or img.height < 32:
+                raise ValueError("Image dimensions are too small (minimum 32x32).")
+        except UnidentifiedImageError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Cannot identify {role} image file '{file.filename}'. "
+                    f"It might be corrupt or an unsupported image format."
+                ),
+            )
+        except ValueError as e_img_val:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid {role} image '{file.filename}': {e_img_val}",
+            )
+        except Exception as e_img_gen:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Error processing {role} image '{file.filename}': {e_img_gen}",
+            )
+
+    base64_media = base64.b64encode(file_contents).decode("utf-8")
+
+    media_type_config = (
+        ALL_MODEL_CONFIGS.get("media_types", {}) if ALL_MODEL_CONFIGS else {}
+    ).get(media_type, {})
+    model_endpoints_for_type = media_type_config.get("model_endpoints", {})
+    models_to_use = list(model_endpoints_for_type.keys())
+
+    if not models_to_use:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No models configured for media type '{media_type}'.",
+        )
+
+    logger.info(
+        f"Request {req_id} [{role}]: Running inference on '{file.filename}' "
+        f"({media_type}) using models: {models_to_use}"
+    )
+
+    model_query_results: Dict[str, Dict] = {}
+    for model_name in models_to_use:
+        model_query_results[model_name] = query_model_api(
+            model_name, media_type, base64_media, threshold, req_id
+        )
+
+    # Check if all models failed
+    all_failed = all("error" in r for r in model_query_results.values())
+    if all_failed:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                f"All models failed to process the {role} media '{file.filename}'. "
+                f"Errors: {[v.get('error', '?') for v in model_query_results.values()]}"
+            ),
+        )
+
+    (
+        _verdict,
+        _confidence,
+        _fake_votes,
+        _real_votes,
+        ensemble_prob_fake,
+        actual_method_used,
+    ) = calculate_ensemble_verdict_api(
+        model_query_results,
+        threshold,
+        ensemble_method,
+        media_type,
+        req_id,
+    )
+
+    logger.info(
+        f"Request {req_id} [{role}]: Inference complete. "
+        f"P(fake)={ensemble_prob_fake:.4f}, method='{actual_method_used}'"
+    )
+
+    return build_authenticity_result(
+        ensemble_prob_fake=ensemble_prob_fake,
+        model_query_results=model_query_results,
+        threshold=threshold,
     )
 
 
@@ -1285,6 +1518,187 @@ async def detect_media_endpoint_api_form(
     finally:
         if "file" in locals() and file:
             await file.close()
+
+
+# ---------------------------------------------------------------------------
+# TruthLens — Compare Endpoint
+# ---------------------------------------------------------------------------
+
+@app.post("/analyze/compare", tags=["TruthLens"], response_model_exclude_none=True)
+async def compare_media_authenticity(
+    request: Request,
+    reference_media: UploadFile = File(
+        ...,
+        description="Reference media file (image or video). Independently analyzed — NOT assumed to be genuine.",
+    ),
+    suspected_media: UploadFile = File(
+        ...,
+        description="Suspected media file (image or video). Independently analyzed.",
+    ),
+    threshold: Optional[float] = Form(
+        None,
+        description="Classification threshold. Defaults to the configured value (0.5).",
+    ),
+    ensemble_method: Optional[str] = Form(
+        None,
+        description="Ensemble method: 'voting', 'average', or 'stacking'. Defaults to configured value.",
+    ),
+):
+    """
+    TruthLens — Multi-Source Authenticity Verification.
+
+    Independently analyzes BOTH the reference and suspected media files using
+    the SAME DeepSafe detection pipeline. Returns separate authenticity results
+    for each file.
+
+    IMPORTANT:
+    - The reference file is NOT assumed to be genuine. It is independently analyzed.
+    - An AI-generated classification does NOT imply the media is a deepfake.
+    - This endpoint does NOT return a deepfake conclusion (that is Task 3).
+
+    Returns:
+        reference_analysis: AuthenticityResult for the reference file
+        suspected_analysis: AuthenticityResult for the suspected file
+    """
+    req_id = request.state.request_id
+    start_time = time.time()
+
+    final_threshold: float = (
+        threshold
+        if threshold is not None
+        else (
+            ALL_MODEL_CONFIGS.get("default_threshold", 0.5)
+            if ALL_MODEL_CONFIGS
+            else 0.5
+        )
+    )
+    final_ensemble_method: str = (
+        ensemble_method
+        if ensemble_method is not None
+        else (
+            ALL_MODEL_CONFIGS.get("default_ensemble_method", "voting")
+            if ALL_MODEL_CONFIGS
+            else "voting"
+        )
+    )
+
+    logger.info(
+        f"Request {req_id}: /analyze/compare received. "
+        f"reference='{reference_media.filename}', suspected='{suspected_media.filename}', "
+        f"threshold={final_threshold}, ensemble='{final_ensemble_method}'"
+    )
+
+    # -----------------------------------------------------------------------
+    # Analyze reference and suspected media independently.
+    # Each goes through the IDENTICAL validation + inference + ensemble path.
+    # Errors are captured per-file so one failure does not hide the other.
+    # -----------------------------------------------------------------------
+    reference_result: Optional[Dict[str, Any]] = None
+    reference_error: Optional[str] = None
+
+    suspected_result: Optional[Dict[str, Any]] = None
+    suspected_error: Optional[str] = None
+
+    try:
+        reference_result = await analyze_single_media_for_compare(
+            file=reference_media,
+            media_type="",  # inferred automatically from content-type / extension
+            threshold=final_threshold,
+            ensemble_method=final_ensemble_method,
+            req_id=req_id,
+            role="reference",
+        )
+    except HTTPException as e:
+        reference_error = e.detail
+        logger.warning(
+            f"Request {req_id}: Reference media analysis failed: {reference_error}"
+        )
+    except Exception as e:
+        reference_error = "An unexpected error occurred while analyzing the reference media."
+        logger.exception(
+            f"Request {req_id}: Unhandled error analyzing reference media: {e}"
+        )
+    finally:
+        await reference_media.close()
+
+    try:
+        suspected_result = await analyze_single_media_for_compare(
+            file=suspected_media,
+            media_type="",  # inferred automatically
+            threshold=final_threshold,
+            ensemble_method=final_ensemble_method,
+            req_id=req_id,
+            role="suspected",
+        )
+    except HTTPException as e:
+        suspected_error = e.detail
+        logger.warning(
+            f"Request {req_id}: Suspected media analysis failed: {suspected_error}"
+        )
+    except Exception as e:
+        suspected_error = "An unexpected error occurred while analyzing the suspected media."
+        logger.exception(
+            f"Request {req_id}: Unhandled error analyzing suspected media: {e}"
+        )
+    finally:
+        await suspected_media.close()
+
+    # If both analyses failed, return a 503.
+    if reference_result is None and suspected_result is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "message": "Both media analyses failed.",
+                "reference_error": reference_error,
+                "suspected_error": suspected_error,
+            },
+        )
+
+    total_processing_time = round(time.time() - start_time, 3)
+
+    response_payload: Dict[str, Any] = {
+        "success": True,
+        "request_id": req_id,
+        "processing_time_seconds": total_processing_time,
+        "threshold_used": final_threshold,
+        "ensemble_method_used": final_ensemble_method,
+    }
+
+    # Reference result
+    if reference_result is not None:
+        response_payload["reference_analysis"] = {
+            "status": "completed",
+            "filename": reference_media.filename,
+            **reference_result,
+        }
+    else:
+        response_payload["reference_analysis"] = {
+            "status": "failed",
+            "filename": reference_media.filename,
+            "error": reference_error,
+        }
+
+    # Suspected result
+    if suspected_result is not None:
+        response_payload["suspected_analysis"] = {
+            "status": "completed",
+            "filename": suspected_media.filename,
+            **suspected_result,
+        }
+    else:
+        response_payload["suspected_analysis"] = {
+            "status": "failed",
+            "filename": suspected_media.filename,
+            "error": suspected_error,
+        }
+
+    logger.info(
+        f"Request {req_id}: /analyze/compare complete in {total_processing_time}s. "
+        f"reference={response_payload['reference_analysis']['status']}, "
+        f"suspected={response_payload['suspected_analysis']['status']}"
+    )
+
+    return response_payload
 
 
 # --- History Endpoints ---

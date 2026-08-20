@@ -1,11 +1,16 @@
 /* frontend/src/App.css */
-/* Remove all previous styles. We will use Tailwind CSS utility classes. */
-/* If you have any truly global base styles that cannot be achieved via Tailwind's @layer base or index.css, they can go here. */
-/* For now, let's keep it minimal or empty. */
+/* Global base styles for TruthLens */
 
-/* Example of a global style if needed, but prefer Tailwind: */
-/*
-body {
-  font-family: 'Inter', sans-serif;
+/* Spinner animation used by Compare Mode loading button */
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
-*/
+
+/* Fade-in animation reused across result cards */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fadeIn 0.35s ease both;
+}
