@@ -546,7 +546,10 @@ function AssessmentCard({ assessment }) {
 // ReportCard – Task 4: Digital Evidence Report generation & download
 // ---------------------------------------------------------------------------
 function ReportCard({ caseId, reportAvailable, isGenerating, reportError, onDownload }) {
+    const [showPreview, setShowPreview] = useState(false);
     if (!caseId && !reportAvailable) return null;
+
+    const reportUrl = `${API_BASE_URL}/reports/${caseId}/download`;
 
     return (
         <div className="card" style={{
@@ -588,7 +591,7 @@ function ReportCard({ caseId, reportAvailable, isGenerating, reportError, onDown
                 <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '8px', padding: '1rem', border: '1px solid rgba(255,255,255,0.08)' }}>
                     <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: '0.25rem', letterSpacing: '0.05em' }}>Report Status</div>
                     <div style={{ fontSize: '0.95rem', fontWeight: '700', color: reportAvailable ? 'var(--success)' : 'var(--text-secondary)' }}>
-                        {reportAvailable ? '✓ Ready to Generate' : '✗ Unavailable'}
+                        {reportAvailable ? '✓ Ready (A4 PDF)' : '✗ Unavailable'}
                     </div>
                 </div>
             </div>
@@ -606,13 +609,13 @@ function ReportCard({ caseId, reportAvailable, isGenerating, reportError, onDown
 
             {/* Action buttons */}
             {reportAvailable && (
-                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
                     <button
                         id="btn-download-forensic-report"
                         onClick={onDownload}
                         disabled={isGenerating}
                         style={{
-                            flex: '1 1 220px', padding: '0.9rem 1.25rem',
+                            flex: '1 1 200px', padding: '0.85rem 1.25rem',
                             background: isGenerating
                                 ? 'rgba(59,130,246,0.3)'
                                 : 'linear-gradient(135deg, #2563eb, #3b82f6)',
@@ -624,30 +627,75 @@ function ReportCard({ caseId, reportAvailable, isGenerating, reportError, onDown
                         }}
                     >
                         {isGenerating
-                            ? (<><span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⏳</span> Generating PDF...</>)
-                            : (<>📥 Download PDF Report</>)
+                            ? (<><span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⏳</span> Downloading...</>)
+                            : (<>📥 Download PDF File</>)
                         }
+                    </button>
+                    <button
+                        id="btn-toggle-preview-report"
+                        onClick={() => setShowPreview(!showPreview)}
+                        style={{
+                            flex: '1 1 180px', padding: '0.85rem 1.25rem',
+                            background: showPreview ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.06)',
+                            color: '#93c5fd', border: '1px solid rgba(59,130,246,0.35)',
+                            borderRadius: '8px', fontWeight: '700', fontSize: '0.95rem',
+                            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+                            transition: 'all 0.2s ease',
+                        }}
+                    >
+                        {showPreview ? '▲ Hide Report Preview' : '👁️ Preview Report On-Screen'}
                     </button>
                     <a
                         id="btn-view-forensic-report"
-                        href={`${API_BASE_URL}/reports/${caseId}/download`}
+                        href={reportUrl}
                         target="_blank"
                         rel="noreferrer"
                         style={{
-                            flex: '1 1 180px', padding: '0.9rem 1.25rem',
+                            flex: '1 1 160px', padding: '0.85rem 1.25rem',
                             background: 'rgba(255,255,255,0.06)',
-                            color: '#93c5fd', border: '1px solid rgba(59,130,246,0.35)',
+                            color: '#cbd5e1', border: '1px solid rgba(255,255,255,0.12)',
                             borderRadius: '8px', fontWeight: '700', fontSize: '0.95rem',
                             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
                             textDecoration: 'none', transition: 'all 0.2s ease',
                         }}
                     >
-                        👁️ Open in New Tab
+                        ↗ Open in New Tab
                     </a>
                 </div>
             )}
 
-            <p style={{ margin: '0.75rem 0 0', fontSize: '0.73rem', color: 'rgba(148,163,184,0.6)', textAlign: 'center', fontStyle: 'italic' }}>
+            {/* Embedded PDF viewer if toggled */}
+            {showPreview && reportAvailable && (
+                <div style={{
+                    marginTop: '1rem',
+                    marginBottom: '1rem',
+                    border: '1px solid rgba(59,130,246,0.3)',
+                    borderRadius: '8px',
+                    overflow: 'hidden',
+                    background: '#0f172a',
+                }}>
+                    <div style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        padding: '0.5rem 1rem', background: 'rgba(59,130,246,0.1)',
+                        borderBottom: '1px solid rgba(59,130,246,0.2)', fontSize: '0.8rem', color: '#93c5fd',
+                    }}>
+                        <span>📄 Live PDF Preview: {caseId}</span>
+                        <a href={reportUrl} target="_blank" rel="noreferrer" style={{ color: '#60a5fa', textDecoration: 'none', fontSize: '0.78rem' }}>Fullscreen ↗</a>
+                    </div>
+                    <iframe
+                        src={`${reportUrl}#toolbar=1&navpanes=0`}
+                        title={`Forensic Report ${caseId}`}
+                        style={{
+                            width: '100%',
+                            height: '600px',
+                            border: 'none',
+                            background: '#ffffff',
+                        }}
+                    />
+                </div>
+            )}
+
+            <p style={{ margin: '0.5rem 0 0', fontSize: '0.73rem', color: 'rgba(148,163,184,0.6)', textAlign: 'center', fontStyle: 'italic' }}>
                 The report records the AI-assisted analysis at the time of processing. It does not constitute legal evidence.
             </p>
         </div>
