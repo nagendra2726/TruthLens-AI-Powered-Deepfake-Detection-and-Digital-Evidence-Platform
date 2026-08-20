@@ -62,6 +62,17 @@ from services.face_verification import (
     DEFAULT_VERIFICATION_THRESHOLD,
 )
 from services.decision_engine import run_decision_engine
+from services.report import (
+    sha256_of_bytes,
+    EvidenceCase,
+    init_evidence_table,
+    generate_case_id,
+    sanitize_case_id,
+    save_case,
+    get_case,
+    build_case,
+    build_pdf,
+)
 
 # --- Logging Configuration ---
 logging.basicConfig(
@@ -267,6 +278,9 @@ async def startup_event_api():
     # Initialize database
     init_db()
     logger.info("Database initialized successfully")
+    # Initialize evidence case table (Task 4)
+    init_evidence_table()
+    logger.info("Evidence case table initialized successfully")
 
     if not SUPPORTED_MEDIA_TYPES:
         logger.error(
@@ -1827,15 +1841,154 @@ async def compare_media_authenticity(
             ),
         }
 
+    # -----------------------------------------------------------------------
+    # Step 4: Create Digital Evidence Case (Task 4)
+    # -----------------------------------------------------------------------
+    case_id: Optional[str] = None
+    try:
+        from PIL import Image as PilImage
+        import base64
+        from datetime import timezone
+
+        db = SessionLocal()
+        try:
+            case_id = generate_case_id(db)
+
+            # Compute SHA-256 hashes of evidence files
+            ref_hash = sha256_of_bytes(reference_bytes) if reference_bytes else None
+            sus_hash = sha256_of_bytes(suspected_bytes) if suspected_bytes else None
+
+            # Extract image dimensions and build small preview thumbnails
+            def _make_preview(raw_bytes, max_px=200):
+                """Return base64-encoded JPEG thumbnail of an image."""
+                if not raw_bytes:
+                    return None, None, None
+                try:
+                    img = PilImage.open(io.BytesIO(raw_bytes)).convert("RGB")
+                    w, h = img.size
+                    img.thumbnail((max_px, max_px), PilImage.LANCZOS)
+                    out = io.BytesIO()
+                    img.save(out, format="JPEG", quality=70)
+                    return w, h, base64.b64encode(out.getvalue()).decode()
+                except Exception:
+                    return None, None, None
+
+            ref_w, ref_h, ref_prev = _make_preview(reference_bytes)
+            sus_w, sus_h, sus_prev = _make_preview(suspected_bytes)
+
+            now_utc = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+            model_info = {
+                "ai_detection_models": ", ".join(
+                    ALL_MODEL_CONFIGS.get("media_types", {})
+                    .get("image", {})
+                    .get("model_endpoints", {}).keys()
+                ) or "N/A",
+                "ensemble_method": final_ensemble_method,
+                "threshold": str(final_threshold),
+                "face_detection_model": "MTCNN (facenet-pytorch)",
+                "face_embedding_model": "InceptionResnetV1 — VGGFace2",
+                "face_similarity_metric": "Cosine Similarity",
+                "face_threshold": str(final_face_threshold),
+                "decision_engine": "TruthLens Rule-Based Engine v1.0",
+            }
+
+            ev_case = build_case(
+                case_id=case_id,
+                request_id=req_id,
+                created_at=datetime.utcfromtimestamp(
+                    time.time() - total_processing_time
+                ).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                completed_at=now_utc,
+                processing_seconds=total_processing_time,
+                reference_filename=reference_media.filename,
+                reference_content_type=reference_type,
+                reference_size_bytes=len(reference_bytes) if reference_bytes else None,
+                reference_width=ref_w,
+                reference_height=ref_h,
+                reference_sha256=ref_hash,
+                reference_preview_b64=ref_prev,
+                suspected_filename=suspected_media.filename,
+                suspected_content_type=suspected_type,
+                suspected_size_bytes=len(suspected_bytes) if suspected_bytes else None,
+                suspected_width=sus_w,
+                suspected_height=sus_h,
+                suspected_sha256=sus_hash,
+                suspected_preview_b64=sus_prev,
+                reference_analysis=response_payload.get("reference_analysis"),
+                suspected_analysis=response_payload.get("suspected_analysis"),
+                face_verification=face_verification_result,
+                assessment=response_payload.get("assessment"),
+                model_info=model_info,
+            )
+            save_case(db, ev_case)
+            logger.info(f"Request {req_id}: Evidence case saved as {case_id}")
+        finally:
+            db.close()
+
+        response_payload["case_id"] = case_id
+        response_payload["report_available"] = True
+
+    except Exception as case_err:
+        logger.warning(f"Request {req_id}: Case creation failed: {case_err}")
+        response_payload["case_id"] = None
+        response_payload["report_available"] = False
+
     logger.info(
         f"Request {req_id}: /analyze/compare complete in {total_processing_time}s. "
         f"reference={response_payload['reference_analysis']['status']}, "
         f"suspected={response_payload['suspected_analysis']['status']}, "
         f"face_verification={face_verification_result.get('result', 'N/A')}, "
-        f"assessment={response_payload['assessment'].get('category', 'N/A')}"
+        f"assessment={response_payload['assessment'].get('category', 'N/A')}, "
+        f"case_id={case_id}"
     )
 
     return response_payload
+
+
+# ---------------------------------------------------------------------------
+# Task 4 — Forensic Report Download Endpoint
+# ---------------------------------------------------------------------------
+from fastapi.responses import Response as FastAPIResponse
+
+
+@app.get("/reports/{case_id}/download", tags=["TruthLens"])
+async def download_forensic_report(case_id: str, db: Session = Depends(get_db)):
+    """
+    Generate and download the TruthLens forensic PDF report for the given Case ID.
+
+    - Validates the Case ID format (must be TL-YYYY-NNNNNN).
+    - Loads stored analysis data — does NOT re-run AI models.
+    - Generates a professional A4 PDF on demand.
+    - Streams the PDF as a download.
+    """
+    # 1. Sanitise and validate the Case ID (prevents path traversal)
+    try:
+        sanitize_case_id(case_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid case identifier.")
+
+    # 2. Retrieve case record
+    ev_case = get_case(db, case_id)
+    if ev_case is None:
+        raise HTTPException(status_code=404, detail="Case not found.")
+
+    # 3. Generate PDF from stored evidence (no AI re-inference)
+    try:
+        from datetime import timezone
+        ev_case.report_generated_at = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        db.commit()
+        pdf_bytes = build_pdf(ev_case)
+    except Exception as pdf_err:
+        logger.exception(f"PDF generation failed for case {case_id}: {pdf_err}")
+        raise HTTPException(status_code=500, detail="Unable to generate the forensic report.")
+
+    safe_name = f"TruthLens_Report_{case_id}.pdf"
+    return FastAPIResponse(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}"'},
+    )
 
 
 # --- History Endpoints ---

@@ -543,6 +543,100 @@ function AssessmentCard({ assessment }) {
 }
 
 // ---------------------------------------------------------------------------
+// ReportCard – Task 4: Digital Evidence Report generation & download
+// ---------------------------------------------------------------------------
+function ReportCard({ caseId, reportAvailable, isGenerating, reportError, onDownload }) {
+    if (!caseId && !reportAvailable) return null;
+
+    return (
+        <div className="card" style={{
+            borderTop: '4px solid #3b82f6',
+            marginTop: '1.5rem',
+            padding: '1.5rem 2rem',
+            background: 'radial-gradient(ellipse at top right, rgba(59,130,246,0.06) 0%, transparent 70%)',
+        }}>
+            {/* Header */}
+            <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem',
+                borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.75rem',
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '1.25rem' }}>📄</span>
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: '700', margin: 0, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                        Digital Evidence Report
+                    </h3>
+                </div>
+                <span style={{
+                    fontSize: '0.75rem', fontWeight: '700', padding: '0.25rem 0.75rem',
+                    borderRadius: '999px', background: 'rgba(59,130,246,0.15)',
+                    color: '#60a5fa', border: '1px solid rgba(59,130,246,0.3)', letterSpacing: '0.05em',
+                }}>TASK 4 · FORENSIC REPORT</span>
+            </div>
+
+            {/* Case ID display */}
+            <div style={{
+                display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                gap: '0.75rem', marginBottom: '1.25rem',
+            }}>
+                <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '8px', padding: '1rem', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: '0.25rem', letterSpacing: '0.05em' }}>Case ID</div>
+                    <div style={{ fontSize: '1rem', fontWeight: '800', color: '#60a5fa', fontFamily: 'monospace', letterSpacing: '0.05em' }}>
+                        {caseId || '—'}
+                    </div>
+                </div>
+                <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '8px', padding: '1rem', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: '0.25rem', letterSpacing: '0.05em' }}>Report Status</div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: '700', color: reportAvailable ? 'var(--success)' : 'var(--text-secondary)' }}>
+                        {reportAvailable ? '✓ Ready to Generate' : '✗ Unavailable'}
+                    </div>
+                </div>
+            </div>
+
+            {/* Error banner */}
+            {reportError && (
+                <div style={{
+                    marginBottom: '1rem', padding: '0.75rem 1rem', borderRadius: '8px',
+                    background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+                    color: 'var(--danger)', fontSize: '0.88rem',
+                }}>
+                    ⚠️ {reportError}
+                </div>
+            )}
+
+            {/* Download button */}
+            {reportAvailable && (
+                <button
+                    id="btn-download-forensic-report"
+                    onClick={onDownload}
+                    disabled={isGenerating}
+                    style={{
+                        width: '100%', padding: '0.9rem 1.5rem',
+                        background: isGenerating
+                            ? 'rgba(59,130,246,0.3)'
+                            : 'linear-gradient(135deg, #2563eb, #3b82f6)',
+                        color: 'white', border: 'none', borderRadius: '8px',
+                        fontWeight: '700', fontSize: '1rem', cursor: isGenerating ? 'not-allowed' : 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+                        transition: 'all 0.2s ease',
+                        boxShadow: isGenerating ? 'none' : '0 4px 15px rgba(59,130,246,0.35)',
+                    }}
+                >
+                    {isGenerating
+                        ? (<><span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⏳</span> Generating Forensic Report...</>)
+                        : (<>📥 Download Forensic Report — {caseId}</>)
+                    }
+                </button>
+            )}
+
+            <p style={{ margin: '0.75rem 0 0', fontSize: '0.73rem', color: 'rgba(148,163,184,0.6)', textAlign: 'center', fontStyle: 'italic' }}>
+                The report records the AI-assisted analysis at the time of processing. It does not constitute legal evidence.
+            </p>
+        </div>
+    );
+}
+
+// ---------------------------------------------------------------------------
 // MediaUploadZone – reusable drop-zone for Compare Mode
 // ---------------------------------------------------------------------------
 function MediaUploadZone({ id, label, sublabel, file, preview, onFileChange, disabled }) {
@@ -648,6 +742,8 @@ function Dashboard({ onLogout }) {
     const [suspectedPreview, setSuspectedPreview] = useState(null);
     const [isComparing, setIsComparing] = useState(false);
     const [compareResults, setCompareResults] = useState(null);
+    const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+    const [reportError, setReportError] = useState(null);
     const [compareError, setCompareError] = useState(null);
 
     useEffect(() => {
@@ -956,6 +1052,41 @@ function Dashboard({ onLogout }) {
                 {/* TruthLens Assessment Section (Task 3) */}
                 <AssessmentCard
                     assessment={compareResults.assessment}
+                />
+
+                {/* Digital Evidence Report Section (Task 4) */}
+                <ReportCard
+                    caseId={compareResults.case_id}
+                    reportAvailable={compareResults.report_available}
+                    isGenerating={isGeneratingReport}
+                    reportError={reportError}
+                    onDownload={async () => {
+                        if (!compareResults.case_id) return;
+                        setIsGeneratingReport(true);
+                        setReportError(null);
+                        try {
+                            const resp = await fetch(
+                                `${API_BASE_URL}/reports/${compareResults.case_id}/download`
+                            );
+                            if (!resp.ok) {
+                                const err = await resp.json().catch(() => ({}));
+                                throw new Error(err.detail || 'Report generation failed');
+                            }
+                            const blob = await resp.blob();
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `TruthLens_Report_${compareResults.case_id}.pdf`;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                        } catch (err) {
+                            setReportError(err.message);
+                        } finally {
+                            setIsGeneratingReport(false);
+                        }
+                    }}
                 />
             </div>
         );
