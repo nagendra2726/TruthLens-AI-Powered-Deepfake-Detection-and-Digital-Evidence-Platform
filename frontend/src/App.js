@@ -604,29 +604,47 @@ function ReportCard({ caseId, reportAvailable, isGenerating, reportError, onDown
                 </div>
             )}
 
-            {/* Download button */}
+            {/* Action buttons */}
             {reportAvailable && (
-                <button
-                    id="btn-download-forensic-report"
-                    onClick={onDownload}
-                    disabled={isGenerating}
-                    style={{
-                        width: '100%', padding: '0.9rem 1.5rem',
-                        background: isGenerating
-                            ? 'rgba(59,130,246,0.3)'
-                            : 'linear-gradient(135deg, #2563eb, #3b82f6)',
-                        color: 'white', border: 'none', borderRadius: '8px',
-                        fontWeight: '700', fontSize: '1rem', cursor: isGenerating ? 'not-allowed' : 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
-                        transition: 'all 0.2s ease',
-                        boxShadow: isGenerating ? 'none' : '0 4px 15px rgba(59,130,246,0.35)',
-                    }}
-                >
-                    {isGenerating
-                        ? (<><span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⏳</span> Generating Forensic Report...</>)
-                        : (<>📥 Download Forensic Report — {caseId}</>)
-                    }
-                </button>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <button
+                        id="btn-download-forensic-report"
+                        onClick={onDownload}
+                        disabled={isGenerating}
+                        style={{
+                            flex: '1 1 220px', padding: '0.9rem 1.25rem',
+                            background: isGenerating
+                                ? 'rgba(59,130,246,0.3)'
+                                : 'linear-gradient(135deg, #2563eb, #3b82f6)',
+                            color: 'white', border: 'none', borderRadius: '8px',
+                            fontWeight: '700', fontSize: '0.95rem', cursor: isGenerating ? 'not-allowed' : 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+                            transition: 'all 0.2s ease',
+                            boxShadow: isGenerating ? 'none' : '0 4px 15px rgba(59,130,246,0.35)',
+                        }}
+                    >
+                        {isGenerating
+                            ? (<><span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⏳</span> Generating PDF...</>)
+                            : (<>📥 Download PDF Report</>)
+                        }
+                    </button>
+                    <a
+                        id="btn-view-forensic-report"
+                        href={`${API_BASE_URL}/reports/${caseId}/download`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                            flex: '1 1 180px', padding: '0.9rem 1.25rem',
+                            background: 'rgba(255,255,255,0.06)',
+                            color: '#93c5fd', border: '1px solid rgba(59,130,246,0.35)',
+                            borderRadius: '8px', fontWeight: '700', fontSize: '0.95rem',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+                            textDecoration: 'none', transition: 'all 0.2s ease',
+                        }}
+                    >
+                        👁️ Open in New Tab
+                    </a>
+                </div>
             )}
 
             <p style={{ margin: '0.75rem 0 0', fontSize: '0.73rem', color: 'rgba(148,163,184,0.6)', textAlign: 'center', fontStyle: 'italic' }}>
@@ -1072,15 +1090,16 @@ function Dashboard({ onLogout }) {
                                 const err = await resp.json().catch(() => ({}));
                                 throw new Error(err.detail || 'Report generation failed');
                             }
-                            const blob = await resp.blob();
-                            const url = URL.createObjectURL(blob);
+                            const rawBlob = await resp.blob();
+                            const pdfBlob = new Blob([rawBlob], { type: 'application/pdf' });
+                            const url = URL.createObjectURL(pdfBlob);
                             const a = document.createElement('a');
                             a.href = url;
                             a.download = `TruthLens_Report_${compareResults.case_id}.pdf`;
                             document.body.appendChild(a);
                             a.click();
                             document.body.removeChild(a);
-                            URL.revokeObjectURL(url);
+                            setTimeout(() => URL.revokeObjectURL(url), 60000);
                         } catch (err) {
                             setReportError(err.message);
                         } finally {

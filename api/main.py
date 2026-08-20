@@ -1987,7 +1987,12 @@ async def download_forensic_report(case_id: str, db: Session = Depends(get_db)):
     return FastAPIResponse(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{safe_name}"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{safe_name}"',
+            "Content-Length": str(len(pdf_bytes)),
+            "Accept-Ranges": "bytes",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+        },
     )
 
 
