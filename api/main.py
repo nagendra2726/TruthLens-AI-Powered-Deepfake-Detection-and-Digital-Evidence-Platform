@@ -16,7 +16,16 @@ Configuration:
 Driven by `deepsafe_config.json`, allowing for dynamic registration of new model endpoints without code changes.
 """
 
+import sys
 import os
+
+_API_DIR = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.dirname(_API_DIR)
+if _API_DIR not in sys.path:
+    sys.path.insert(0, _API_DIR)
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(1, _PROJECT_ROOT)
+
 import time
 import base64
 import requests
@@ -139,10 +148,39 @@ def get_environment_variable(
 
 
 # --- Configuration Loading ---
+def _find_config_file() -> Optional[str]:
+    from_env = os.environ.get("DEEPSAFE_CONFIG_FILE_PATH")
+    if from_env and os.path.exists(from_env):
+        return from_env
+    local_cfg = os.path.join(_PROJECT_ROOT, "config", "deepsafe_config.json")
+    if os.path.exists(local_cfg):
+        return local_cfg
+    docker_cfg = "/app/config/deepsafe_config.json"
+    if os.path.exists(docker_cfg):
+        return docker_cfg
+    cwd_cfg = os.path.abspath("config/deepsafe_config.json")
+    if os.path.exists(cwd_cfg):
+        return cwd_cfg
+    return from_env or local_cfg
+
+
+def _find_artifacts_dir() -> str:
+    from_env = os.environ.get("META_MODEL_ARTIFACTS_DIR")
+    if from_env and os.path.exists(from_env):
+        return from_env
+    local_artifacts = os.path.join(_API_DIR, "meta_model_artifacts")
+    if os.path.exists(local_artifacts):
+        return local_artifacts
+    docker_artifacts = "/app/meta_model_artifacts"
+    if os.path.exists(docker_artifacts):
+        return docker_artifacts
+    return local_artifacts
+
+
 ALL_MODEL_CONFIGS: Dict[str, Any] = {}
 SUPPORTED_MEDIA_TYPES: List[str] = []
 
-CONFIG_FILE_PATH_FROM_ENV = get_environment_variable("DEEPSAFE_CONFIG_FILE_PATH")
+CONFIG_FILE_PATH_FROM_ENV = _find_config_file()
 
 if CONFIG_FILE_PATH_FROM_ENV and os.path.exists(CONFIG_FILE_PATH_FROM_ENV):
     logger.info(f"Loading configuration from: {CONFIG_FILE_PATH_FROM_ENV}")
@@ -172,9 +210,7 @@ else:
 
 DEFAULT_TIMEOUT: int = int(ALL_MODEL_CONFIGS.get("default_api_timeout_seconds", 1200))
 MAX_RETRIES: int = int(ALL_MODEL_CONFIGS.get("default_max_retries", 1))
-META_MODEL_ARTIFACTS_DIR: str = get_environment_variable(
-    "META_MODEL_ARTIFACTS_DIR", "/app/meta_model_artifacts"
-)
+META_MODEL_ARTIFACTS_DIR: str = _find_artifacts_dir()
 
 # --- Global Variables for Meta-Learners ---
 meta_learners: Dict[str, Any] = {}
