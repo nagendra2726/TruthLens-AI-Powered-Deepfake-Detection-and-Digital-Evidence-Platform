@@ -2,7 +2,8 @@ import pytest
 import sys
 import os
 
-# Add project root to sys.path so we can import deepsafe_utils and api
+# Add project root and api to sys.path so all test modules can import without manual PYTHONPATH
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "api")))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from deepsafe_utils.config_manager import ConfigManager

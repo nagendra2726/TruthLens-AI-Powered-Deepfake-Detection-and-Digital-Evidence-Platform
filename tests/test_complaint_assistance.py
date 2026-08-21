@@ -6,6 +6,11 @@ TXT/PDF downloads, ZIP packaging, and regression integrity.
 import io
 import json
 import zipfile
+import sys
+import os
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "api"))
+
 import pytest
 from fastapi.testclient import TestClient
 
