@@ -36,7 +36,6 @@ export default function ComplaintAssistanceCard({
         if (!caseId) return;
 
         async function fetchEligibility() {
-            setLoadingEligibility(true);
             try {
                 const res = await fetch(`${apiBaseUrl}/cases/${caseId}/complaint-eligibility`);
                 if (res.ok) {
@@ -45,8 +44,6 @@ export default function ComplaintAssistanceCard({
                 }
             } catch (err) {
                 console.warn('Failed to fetch eligibility status', err);
-            } finally {
-                setLoadingEligibility(false);
             }
         }
 
