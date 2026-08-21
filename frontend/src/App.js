@@ -168,9 +168,101 @@ function AuthenticityCard({ title, analysis, previewUrl, mediaType }) {
                 }} />
             </div>
 
+            {/* Multi-Signal Evidence Fusion breakdown (Task 6) */}
+            {analysis.evidence_fusion && (
+                <div style={{ marginTop: '1rem', padding: '0.75rem', background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                        <span style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--text-primary)' }}>Evidence Fusion</span>
+                        <span style={{
+                            fontSize: '0.7rem', fontWeight: '700', padding: '0.15rem 0.5rem', borderRadius: '999px',
+                            background: analysis.evidence_fusion.signal_agreement === 'AGREE' ? 'rgba(16,185,129,0.2)'
+                                : analysis.evidence_fusion.signal_agreement === 'DISAGREE' ? 'rgba(239,68,68,0.2)'
+                                : 'rgba(245,158,11,0.2)',
+                            color: analysis.evidence_fusion.signal_agreement === 'AGREE' ? 'var(--success)'
+                                : analysis.evidence_fusion.signal_agreement === 'DISAGREE' ? 'var(--danger)'
+                                : '#f59e0b',
+                            border: `1px solid ${analysis.evidence_fusion.signal_agreement === 'AGREE' ? 'var(--success)' : analysis.evidence_fusion.signal_agreement === 'DISAGREE' ? 'var(--danger)' : '#f59e0b'}`,
+                        }}>
+                            {analysis.evidence_fusion.signal_agreement}
+                        </span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.78rem', marginBottom: '0.5rem' }}>
+                        <div style={{ background: 'rgba(0,0,0,0.2)', padding: '0.4rem 0.6rem', borderRadius: '4px' }}>
+                            <div style={{ color: 'var(--text-secondary)', fontSize: '0.7rem' }}>AI Ensemble ({((analysis.evidence_fusion.ai_model_weight || 0.7) * 100).toFixed(0)}%)</div>
+                            <div style={{ fontWeight: '700', color: (analysis.evidence_fusion.ai_model_score || 0) >= 0.5 ? 'var(--danger)' : 'var(--success)' }}>
+                                {((analysis.evidence_fusion.ai_model_score || 0) * 100).toFixed(1)}%
+                            </div>
+                        </div>
+                        <div style={{ background: 'rgba(0,0,0,0.2)', padding: '0.4rem 0.6rem', borderRadius: '4px' }}>
+                            <div style={{ color: 'var(--text-secondary)', fontSize: '0.7rem' }}>Pixel Forensics ({((analysis.evidence_fusion.forensic_weight || 0.3) * 100).toFixed(0)}%)</div>
+                            <div style={{ fontWeight: '700', color: (analysis.evidence_fusion.forensic_score || 0) >= 0.5 ? 'var(--danger)' : 'var(--success)' }}>
+                                {((analysis.evidence_fusion.forensic_score || 0) * 100).toFixed(1)}%
+                            </div>
+                        </div>
+                    </div>
+
+                    {analysis.evidence_fusion.fusion_explanation && (
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>
+                            {analysis.evidence_fusion.fusion_explanation}
+                        </p>
+                    )}
+                </div>
+            )}
+
+            {/* Expandable Forensic Signals Drawer (Task 6) */}
+            {analysis.pixel_forensics && (
+                <details style={{ marginTop: '0.75rem', background: 'rgba(255,255,255,0.02)', padding: '0.5rem 0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <summary style={{ cursor: 'pointer', fontSize: '0.8rem', fontWeight: '600', color: '#60a5fa', userSelect: 'none' }}>
+                        🔬 View Forensic Signals & Metadata ▸
+                    </summary>
+                    <div style={{ marginTop: '0.6rem', fontSize: '0.78rem' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem', marginBottom: '0.6rem' }}>
+                            <div style={{ color: 'var(--text-secondary)' }}>Signal Quality:</div>
+                            <div style={{ fontWeight: '600', color: 'var(--text-primary)', textAlign: 'right' }}>{analysis.pixel_forensics.signal_quality}</div>
+
+                            <div style={{ color: 'var(--text-secondary)' }}>Noise Residual Var:</div>
+                            <div style={{ fontWeight: '600', color: 'var(--text-primary)', textAlign: 'right' }}>{analysis.pixel_forensics.noise?.residual_variance ?? 'N/A'}</div>
+
+                            <div style={{ color: 'var(--text-secondary)' }}>LBP Texture Entropy:</div>
+                            <div style={{ fontWeight: '600', color: 'var(--text-primary)', textAlign: 'right' }}>{analysis.pixel_forensics.texture?.lbp_entropy ?? 'N/A'}</div>
+
+                            <div style={{ color: 'var(--text-secondary)' }}>Chrominance Richness:</div>
+                            <div style={{ fontWeight: '600', color: 'var(--text-primary)', textAlign: 'right' }}>{analysis.pixel_forensics.color?.chrominance_richness ?? 'N/A'}</div>
+
+                            <div style={{ color: 'var(--text-secondary)' }}>Edge Density:</div>
+                            <div style={{ fontWeight: '600', color: 'var(--text-primary)', textAlign: 'right' }}>{analysis.pixel_forensics.edges?.edge_density ?? 'N/A'}</div>
+
+                            <div style={{ color: 'var(--text-secondary)' }}>2D FFT Spectral Ratio:</div>
+                            <div style={{ fontWeight: '600', color: 'var(--text-primary)', textAlign: 'right' }}>{analysis.pixel_forensics.frequency?.high_low_ratio ?? 'N/A'}</div>
+                        </div>
+
+                        {/* Metadata Supporting Info */}
+                        {analysis.metadata_analysis && (
+                            <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px dashed rgba(255,255,255,0.08)' }}>
+                                <div style={{ fontWeight: '700', color: 'var(--text-secondary)', fontSize: '0.75rem', marginBottom: '0.25rem' }}>
+                                    EXIF Supporting Metadata:
+                                </div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                                    {analysis.metadata_analysis.available ? (
+                                        <>
+                                            {analysis.metadata_analysis.camera_make && <div>• Device: {analysis.metadata_analysis.camera_make} {analysis.metadata_analysis.camera_model}</div>}
+                                            {analysis.metadata_analysis.software && <div>• Software: {analysis.metadata_analysis.software}</div>}
+                                            {analysis.metadata_analysis.gps_present && <div>• Geotag: GPS metadata flag present</div>}
+                                        </>
+                                    ) : (
+                                        <div>• No EXIF metadata present (Supporting signal only)</div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </details>
+            )}
+
             {/* Individual model scores */}
             {analysis.model_results && Object.keys(analysis.model_results).length > 0 && (
-                <details style={{ marginTop: '1rem' }}>
+                <details style={{ marginTop: '0.75rem' }}>
                     <summary style={{ cursor: 'pointer', fontSize: '0.8rem', color: 'var(--text-secondary)', userSelect: 'none' }}>
                         Individual model scores ▸
                     </summary>

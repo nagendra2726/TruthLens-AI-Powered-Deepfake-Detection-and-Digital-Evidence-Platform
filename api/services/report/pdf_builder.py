@@ -458,11 +458,69 @@ def build_pdf(case) -> bytes:
     story.append(auth_table)
     story.append(Spacer(1, 4))
     story.append(Paragraph(
-        "Note: AI scores represent model output estimates and should not be interpreted as "
-        "statistically calibrated probabilities of authenticity.",
+        "Note: Raw model outputs and pixel forensic features are combined via evidence fusion to improve robustness.",
         styles["disclaimer"],
     ))
-    story.append(Spacer(1, 0.5 * cm))
+    story.append(Spacer(1, 0.4 * cm))
+
+    # ════════════════════════════════════════════════════════════════════════
+    # SECTION 4B — MULTI-SIGNAL PIXEL FORENSICS & EVIDENCE FUSION
+    # ════════════════════════════════════════════════════════════════════════
+    ref_fusion = ref_analysis.get("evidence_fusion", {})
+    sus_fusion = sus_analysis.get("evidence_fusion", {})
+    ref_pf = ref_analysis.get("pixel_forensics", {})
+    sus_pf = sus_analysis.get("pixel_forensics", {})
+
+    if ref_fusion or sus_fusion or ref_pf or sus_pf:
+        story.append(_section_box("4B. MULTI-SIGNAL FORENSICS & EVIDENCE FUSION", styles))
+        story.append(Spacer(1, 6))
+
+        fusion_header = [
+            Paragraph("<b>Forensic Signal / Fusion</b>", styles["field_label"]),
+            Paragraph("<b>Reference Media</b>",         styles["field_label"]),
+            Paragraph("<b>Suspected Media</b>",         styles["field_label"]),
+        ]
+        fusion_data = [fusion_header]
+
+        for label, val_func in [
+            ("AI Model Ensemble Score", lambda a, f, p: _fmt_pct(f.get("ai_model_score") if f else a.get("ai_probability"))),
+            ("Pixel Forensic Score",    lambda a, f, p: _fmt_pct(f.get("forensic_score") if f else (p.get("score") if p else None))),
+            ("Fused Authenticity Score",lambda a, f, p: _fmt_pct(f.get("fused_score") if f else a.get("ai_probability"))),
+            ("Signal Agreement",        lambda a, f, p: str(f.get("signal_agreement", "N/A"))),
+            ("Forensic Signal Quality", lambda a, f, p: str(p.get("signal_quality", "N/A")) if p else "N/A"),
+            ("Noise Residual Variance", lambda a, f, p: str(p.get("noise", {}).get("residual_variance", "N/A")) if p else "N/A"),
+            ("LBP Texture Entropy",     lambda a, f, p: str(p.get("texture", {}).get("lbp_entropy", "N/A")) if p else "N/A"),
+            ("Chrominance Richness",    lambda a, f, p: str(p.get("color", {}).get("chrominance_richness", "N/A")) if p else "N/A"),
+            ("Edge Density",            lambda a, f, p: str(p.get("edges", {}).get("edge_density", "N/A")) if p else "N/A"),
+            ("2D FFT Spectral Ratio",   lambda a, f, p: str(p.get("frequency", {}).get("high_low_ratio", "N/A")) if p else "N/A"),
+            ("EXIF Hardware / Software",lambda a, f, p: " / ".join(filter(None, [p.get("metadata", {}).get("camera_make"), p.get("metadata", {}).get("software")])) or "No EXIF" if p else "N/A"),
+        ]:
+            r_str = val_func(ref_analysis, ref_fusion, ref_pf)
+            s_str = val_func(sus_analysis, sus_fusion, sus_pf)
+            fusion_data.append([
+                Paragraph(label, styles["field_label"]),
+                Paragraph(r_str, styles["field_val"]),
+                Paragraph(s_str, styles["field_val"]),
+            ])
+
+        fusion_table = Table(fusion_data, colWidths=[CONTENT_W * 0.35, CONTENT_W * 0.325, CONTENT_W * 0.325])
+        fusion_table.setStyle(TableStyle([
+            ("BACKGROUND",    (0, 0), (-1, 0), C_HEADER_BG),
+            ("TEXTCOLOR",     (0, 0), (-1, 0), colors.white),
+            ("ROWBACKGROUNDS",(0, 1), (-1, -1), [colors.HexColor("#f8fafc"), colors.white]),
+            ("LINEBELOW",     (0, 0), (-1, -1), 0.25, C_BORDER),
+            ("BOX",           (0, 0), (-1, -1), 0.5, C_BORDER),
+            ("TOPPADDING",    (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 6),
+        ]))
+        story.append(fusion_table)
+        story.append(Spacer(1, 4))
+        story.append(Paragraph(
+            "Note: Metadata is evaluated strictly as non-deterministic supporting evidence and does not establish authenticity on its own.",
+            styles["disclaimer"],
+        ))
+        story.append(Spacer(1, 0.5 * cm))
 
     # ════════════════════════════════════════════════════════════════════════
     # SECTION 5 — FACE IDENTITY VERIFICATION
