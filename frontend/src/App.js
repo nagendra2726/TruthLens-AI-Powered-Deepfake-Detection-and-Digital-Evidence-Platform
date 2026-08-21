@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Login from './components/Login';
 import Register from './components/Register';
+import ComplaintAssistanceCard from './components/ComplaintAssistanceCard';
 import './App.css';
 import {
     Chart as ChartJS,
@@ -1127,6 +1128,41 @@ function Dashboard({ onLogout }) {
                     isGenerating={isGeneratingReport}
                     reportError={reportError}
                     onDownload={async () => {
+                        if (!compareResults.case_id) return;
+                        setIsGeneratingReport(true);
+                        setReportError(null);
+                        try {
+                            const resp = await fetch(
+                                `${API_BASE_URL}/reports/${compareResults.case_id}/download`
+                            );
+                            if (!resp.ok) {
+                                const err = await resp.json().catch(() => ({}));
+                                throw new Error(err.detail || 'Report generation failed');
+                            }
+                            const rawBlob = await resp.blob();
+                            const pdfBlob = new Blob([rawBlob], { type: 'application/pdf' });
+                            const url = URL.createObjectURL(pdfBlob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `TruthLens_Report_${compareResults.case_id}.pdf`;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            setTimeout(() => URL.revokeObjectURL(url), 60000);
+                        } catch (err) {
+                            setReportError(err.message);
+                        } finally {
+                            setIsGeneratingReport(false);
+                        }
+                    }}
+                />
+
+                {/* Cybercrime Complaint Assistance Section (Task 5) */}
+                <ComplaintAssistanceCard
+                    caseId={compareResults.case_id}
+                    assessment={compareResults.assessment}
+                    apiBaseUrl={API_BASE_URL}
+                    onDownloadForensicReport={async () => {
                         if (!compareResults.case_id) return;
                         setIsGeneratingReport(true);
                         setReportError(null);

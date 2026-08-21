@@ -73,6 +73,15 @@ from services.report import (
     build_case,
     build_pdf,
 )
+from services.complaint import (
+    ComplaintEligibilityResponse,
+    ComplaintDraftResponse,
+    UserIncidentInput,
+    evaluate_case_eligibility,
+    generate_complaint_draft,
+    build_complaint_pdf,
+    build_evidence_package_zip,
+)
 
 # --- Logging Configuration ---
 logging.basicConfig(
@@ -1991,6 +2000,179 @@ async def download_forensic_report(case_id: str, db: Session = Depends(get_db)):
             "Content-Disposition": f'attachment; filename="{safe_name}"',
             "Content-Length": str(len(pdf_bytes)),
             "Accept-Ranges": "bytes",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Task 5 — Cybercrime Complaint Assistance Endpoints
+# ---------------------------------------------------------------------------
+
+@app.get(
+    "/cases/{case_id}/complaint-eligibility",
+    response_model=ComplaintEligibilityResponse,
+    tags=["TruthLens - Task 5"],
+)
+async def check_complaint_eligibility(case_id: str, db: Session = Depends(get_db)):
+    """
+    Check eligibility for Cybercrime Complaint Assistance based on stored case findings.
+    Does NOT assert crime, only provides screening advice and recommendations.
+    """
+    try:
+        sanitize_case_id(case_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid case identifier.")
+
+    ev_case = get_case(db, case_id)
+    if ev_case is None:
+        raise HTTPException(status_code=404, detail="Case not found.")
+
+    return evaluate_case_eligibility(ev_case)
+
+
+@app.post(
+    "/cases/{case_id}/complaint-draft",
+    response_model=ComplaintDraftResponse,
+    tags=["TruthLens - Task 5"],
+)
+async def create_complaint_draft(
+    case_id: str,
+    user_input: UserIncidentInput,
+    db: Session = Depends(get_db),
+):
+    """
+    Generate a user-reviewable cybercrime complaint draft combining verified
+    stored evidence with user-supplied incident details.
+    
+    IMPORTANT:
+    - Does NOT re-run AI models.
+    - Does NOT automatically file or submit anything to any authority.
+    - Unknown/unprovided facts are left explicitly blank or 'Not provided'.
+    """
+    try:
+        sanitize_case_id(case_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid case identifier.")
+
+    ev_case = get_case(db, case_id)
+    if ev_case is None:
+        raise HTTPException(status_code=404, detail="Case not found.")
+
+    try:
+        draft_response = generate_complaint_draft(ev_case, user_input)
+        logger.info(f"Generated cybercrime complaint draft for case {case_id}")
+        return draft_response
+    except Exception as err:
+        logger.exception(f"Failed to generate complaint draft for case {case_id}: {err}")
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to generate complaint draft from case evidence.",
+        )
+
+
+@app.post(
+    "/cases/{case_id}/complaint-draft/download",
+    tags=["TruthLens - Task 5"],
+)
+async def download_complaint_draft_file(
+    case_id: str,
+    user_input: UserIncidentInput,
+    format: str = "pdf",
+    db: Session = Depends(get_db),
+):
+    """
+    Generate and stream the complaint draft as a downloadable file (PDF or TXT).
+    Clearly labeled as 'USER-REVIEWABLE COMPLAINT DRAFT'.
+    """
+    try:
+        sanitize_case_id(case_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid case identifier.")
+
+    ev_case = get_case(db, case_id)
+    if ev_case is None:
+        raise HTTPException(status_code=404, detail="Case not found.")
+
+    draft_response = generate_complaint_draft(ev_case, user_input)
+
+    format_clean = format.lower().strip()
+    if format_clean == "txt":
+        txt_content = draft_response.draft.full_text.encode("utf-8")
+        safe_name = f"TruthLens_Complaint_Draft_{case_id}.txt"
+        return FastAPIResponse(
+            content=txt_content,
+            media_type="text/plain; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="{safe_name}"',
+                "Content-Length": str(len(txt_content)),
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+            },
+        )
+    elif format_clean == "pdf":
+        try:
+            pdf_bytes = build_complaint_pdf(draft_response, ev_case)
+        except Exception as pdf_err:
+            logger.exception(f"Complaint PDF generation failed for {case_id}: {pdf_err}")
+            raise HTTPException(
+                status_code=500, detail="Unable to build complaint draft PDF."
+            )
+
+        safe_name = f"TruthLens_Complaint_Draft_{case_id}.pdf"
+        return FastAPIResponse(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{safe_name}"',
+                "Content-Length": str(len(pdf_bytes)),
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+            },
+        )
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported format requested. Choose 'pdf' or 'txt'.",
+        )
+
+
+@app.post(
+    "/cases/{case_id}/evidence-package/download",
+    tags=["TruthLens - Task 5"],
+)
+async def download_evidence_package(
+    case_id: str,
+    user_input: UserIncidentInput,
+    db: Session = Depends(get_db),
+):
+    """
+    Package all case digital evidence (Complaint Draft TXT/PDF, Forensic Report PDF, Manifest JSON)
+    into a secure, sanitized ZIP archive: TruthLens_Evidence_{case_id}.zip.
+    """
+    try:
+        sanitize_case_id(case_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid case identifier.")
+
+    ev_case = get_case(db, case_id)
+    if ev_case is None:
+        raise HTTPException(status_code=404, detail="Case not found.")
+
+    try:
+        draft_response = generate_complaint_draft(ev_case, user_input)
+        zip_bytes = build_evidence_package_zip(ev_case, draft_response)
+    except Exception as pkg_err:
+        logger.exception(f"Evidence packaging failed for {case_id}: {pkg_err}")
+        raise HTTPException(
+            status_code=500, detail="Unable to package case evidence artifacts."
+        )
+
+    safe_name = f"TruthLens_Evidence_{case_id}.zip"
+    return FastAPIResponse(
+        content=zip_bytes,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{safe_name}"',
+            "Content-Length": str(len(zip_bytes)),
             "Cache-Control": "no-cache, no-store, must-revalidate",
         },
     )
