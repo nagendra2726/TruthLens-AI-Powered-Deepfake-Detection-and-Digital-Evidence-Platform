@@ -351,7 +351,10 @@ async def startup_event_api():
 
     # Pre-warm TruthLens Vision Transformer AI Model ONCE at startup (Phase 4 requirement)
     try:
-        from api.services.ai_detector import get_ai_detector
+        try:
+            from api.services.ai_detector import get_ai_detector
+        except ImportError:
+            from services.ai_detector import get_ai_detector
         detector = get_ai_detector()
         logger.info(f"TruthLens AI model preloaded (live={detector.is_loaded})")
     except Exception as e:
@@ -437,11 +440,35 @@ async def startup_event_api():
     logger.info(f"Meta-learner loading summary (True if loaded): {loaded_summary}")
 
 
-# --- Middleware ---
+# --- Middleware & CORS ---
+_default_cors_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+
+_frontend_url_env = os.environ.get("FRONTEND_URL", "").strip().rstrip("/")
+_allowed_origins_env = os.environ.get("ALLOWED_ORIGINS", "").strip()
+
+_cors_origins = list(_default_cors_origins)
+if _frontend_url_env and _frontend_url_env not in _cors_origins:
+    _cors_origins.append(_frontend_url_env)
+if _allowed_origins_env:
+    for _orig in _allowed_origins_env.split(","):
+        _cleaned = _orig.strip().rstrip("/")
+        if _cleaned and _cleaned not in _cors_origins:
+            _cors_origins.append(_cleaned)
+
+_allow_all_cors = "*" in _cors_origins or _allowed_origins_env == "*"
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=["*"] if _allow_all_cors else _cors_origins,
+    allow_origin_regex=r"https://.*\.onrender\.com" if not _allow_all_cors else None,
+    allow_credentials=False if _allow_all_cors else True,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["Content-Disposition", "Content-Length"],
@@ -3233,13 +3260,22 @@ async def pipeline_report_endpoint(
 # ════════════════════════════════════════════════════════════════════════════
 # TRUTHLENS CORE API ENDPOINTS (PHASE 8 & SPECIFICATION REQUIREMENT)
 # ════════════════════════════════════════════════════════════════════════════
-from api.services.ai_detector import (
-    get_ai_detector,
-    extract_supporting_forensics,
-    calculate_sha256,
-    DEFAULT_AI_THRESHOLD,
-    DEFAULT_REAL_THRESHOLD,
-)
+try:
+    from api.services.ai_detector import (
+        get_ai_detector,
+        extract_supporting_forensics,
+        calculate_sha256,
+        DEFAULT_AI_THRESHOLD,
+        DEFAULT_REAL_THRESHOLD,
+    )
+except ImportError:
+    from services.ai_detector import (
+        get_ai_detector,
+        extract_supporting_forensics,
+        calculate_sha256,
+        DEFAULT_AI_THRESHOLD,
+        DEFAULT_REAL_THRESHOLD,
+    )
 
 @app.get("/api/health", tags=["TruthLens API"])
 async def truthlens_api_health_endpoint():

@@ -1,0 +1,42 @@
+services:
+  # ─────────────────────────────────────────────────────────────
+  # TruthLens Backend API (FastAPI)
+  # ─────────────────────────────────────────────────────────────
+  - type: web
+    name: truthlens-api
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r api/requirements.txt
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: USE_TF
+        value: "0"
+      - key: USE_TORCH
+        value: "1"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: FRONTEND_URL
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+
+  # ─────────────────────────────────────────────────────────────
+  # TruthLens Frontend Application (React)
+  # ─────────────────────────────────────────────────────────────
+  - type: static
+    name: truthlens-frontend
+    region: oregon
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: build
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: REACT_APP_API_URL
+        sync: false

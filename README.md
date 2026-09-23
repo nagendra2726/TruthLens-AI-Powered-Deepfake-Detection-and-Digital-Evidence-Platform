@@ -174,12 +174,68 @@ TruthLens uses precise, non-definitive language in all outputs:
 
 ---
 
+## Deploying on Render
+
+TruthLens is configured for deployment on Render with a two-service architecture:
+
+```
+┌─────────────────────────────────┐       ┌─────────────────────────────────┐
+│       Render Static Site        │       │       Render Web Service        │
+│    (React Frontend — CRA)       │ ───▶  │      (FastAPI Python API)       │
+│                                 │       │                                 │
+│  • Build: npm run build         │       │  • Runtime: Python              │
+│  • Publish dir: build           │       │  • Build: pip install -r ...    │
+│  • SPA Rewrites: _redirects     │       │  • Start: uvicorn api.main:app  │
+│  • Env: REACT_APP_API_URL       │       │  • Health check: /api/health    │
+└─────────────────────────────────┘       └─────────────────────────────────┘
+```
+
+You can deploy via the provided [`render.yaml`](./render.yaml) Blueprint or manually through the Render Dashboard:
+
+### 1. Backend: Render Web Service
+
+- **Name:** `truthlens-api`
+- **Environment:** `Python`
+- **Region:** `Oregon` (or closest region)
+- **Branch:** `main`
+- **Root Directory:** (leave blank — project root)
+- **Build Command:** `pip install -r api/requirements.txt`
+- **Start Command:** `uvicorn api.main:app --host 0.0.0.0 --port $PORT`
+- **Health Check Path:** `/api/health`
+- **Environment Variables:**
+  - `PORT`: `10000` (Render sets `$PORT` automatically)
+  - `SECRET_KEY`: `<generate-a-secure-random-string>`
+  - `FRONTEND_URL`: `https://truthlens-frontend.onrender.com` (your frontend static site URL)
+  - `USE_TF`: `0`
+  - `USE_TORCH`: `1`
+
+### 2. Frontend: Render Static Site
+
+- **Name:** `truthlens-frontend`
+- **Branch:** `main`
+- **Root Directory:** `frontend`
+- **Build Command:** `npm install && npm run build`
+- **Publish Directory:** `build`
+- **SPA Rewrites:** Pre-configured in `frontend/public/_redirects` (`/*  /index.html  200`)
+- **Environment Variables:**
+  - `REACT_APP_API_URL`: `https://truthlens-api.onrender.com` (your backend URL)
+
+### 3. Firebase Authorized Domains
+
+After Render generates your frontend domain:
+1. Open the [Firebase Console](https://console.firebase.google.com/) → Your Project (`truthlens-6aa27`).
+2. Navigate to **Authentication** → **Settings** → **Authorized Domains**.
+3. Add your Render frontend domain (e.g., `truthlens-frontend.onrender.com`).
+
+---
+
 ## Key Limitations
 
-- Novel AI generators not in training distribution may yield lower confidence.
-- Face verification requires clear, unoccluded reference images.
-- EXIF metadata may be absent or spoofed in processed media.
-- This tool is an investigative screening aid; expert verification is recommended for legal proceedings.
+- **Ephemeral Storage on Render Free Tier:** Render Web Services use an ephemeral filesystem. SQLite database records and temporary uploads are cleared when the container restarts or spins down. For permanent case retention, configure a persistent disk or set `DATABASE_URL` to an external PostgreSQL instance.
+- **Render Free Tier Spin-Down:** Free instances spin down after 15 minutes of inactivity. The initial request after spin-down may take ~30–50 seconds while the container initializes and pre-warms the Vision Transformer model.
+- **Novel AI Generators:** Unseen generative architectures not represented in the training distribution may yield lower confidence.
+- **Face Verification:** Requires clear, unoccluded reference images.
+- **Forensic Scope:** TruthLens is an investigative screening tool; expert verification is recommended for legal proceedings.
 
 ---
 
