@@ -30,6 +30,8 @@ class FaceVerifier:
         reference_image: Image.Image,
         suspected_image: Image.Image,
         threshold: float = DEFAULT_VERIFICATION_THRESHOLD,
+        consent_declared: bool = False,
+        consent_source: Optional[str] = None,
     ) -> FaceVerificationResult:
         """
         Independently detects faces in reference and suspected images, generates identity
@@ -119,6 +121,8 @@ class FaceVerifier:
                 match=is_match,
                 result=verdict,
                 threshold_used=threshold,
+                consent_declared=consent_declared,
+                consent_source=consent_source,
             )
 
         except Exception as e:
@@ -129,5 +133,7 @@ class FaceVerifier:
                 suspected_face_detected=False,
                 result="UNABLE_TO_VERIFY",
                 threshold_used=threshold,
+                consent_declared=consent_declared,
+                consent_source=consent_source,
                 message="An internal error occurred during face verification.",
             )

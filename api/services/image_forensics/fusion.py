@@ -31,28 +31,32 @@ def compute_forensic_score(
     """
     Computes an empirical statistical forensic score from physical pixel signals.
     Combines noise residual, micro-texture entropy, edge distribution, and FFT spectral energy.
+    0.0 -> Highly Authentic / Photographic
+    1.0 -> Highly Synthetic / AI-Generated
     """
-    # 1. Noise signal contribution: Real camera images have higher consistent sensor noise
-    # While AI images have attenuated noise or severe spatial patch inconsistencies
-    noise_term = 1.0 - min(1.0, max(0.0, (noise.residual_variance - 1.0) / 25.0))
+    # 1. Texture naturalness: Real photos have high LBP entropy (5.0 - 7.5). Synthetic < 4.0
+    texture_synthetic = 1.0 - min(1.0, max(0.0, (texture.lbp_entropy - 3.5) / 3.5))
 
-    # 2. Texture signal contribution: Real natural photos have higher LBP entropy
-    texture_term = 1.0 - min(1.0, max(0.0, (texture.lbp_entropy - 4.5) / 3.0))
+    # 2. Chrominance richness: Real photos have rich color variation (> 150). Synthetic often < 50
+    chroma_synthetic = 1.0 - min(1.0, max(0.0, (color.chrominance_richness - 30.0) / 300.0))
 
-    # 3. High-frequency spectral term: Generative models have lower relative high-frequency ratio
-    freq_term = 1.0 - min(1.0, max(0.0, (frequency.high_low_ratio - 0.0001) / 0.005))
+    # 3. Noise consistency: Real camera sensor noise > 3.0. In compressed photos (> 1.0 with natural texture)
+    if color.chrominance_richness > 200.0 and texture.lbp_entropy > 4.8:
+        noise_synthetic = 1.0 - min(1.0, max(0.0, (noise.residual_variance - 0.5) / 8.0))
+    else:
+        noise_synthetic = 1.0 - min(1.0, max(0.0, (noise.residual_variance - 1.5) / 15.0))
 
-    # 4. Color richness term: Natural photos have rich cross-channel variance
-    color_term = 1.0 - min(1.0, max(0.0, (color.chrominance_richness - 20.0) / 100.0))
+    # 4. Frequency: Real camera optics have higher relative high-frequency ratio (> 0.0002)
+    freq_synthetic = 1.0 - min(1.0, max(0.0, (frequency.high_low_ratio - 0.00005) / 0.002))
 
     # Weighted combination of physical feature indicators
     raw_forensic_score = (
-        0.35 * noise_term
-        + 0.25 * texture_term
-        + 0.25 * freq_term
-        + 0.15 * color_term
+        0.35 * texture_synthetic
+        + 0.30 * chroma_synthetic
+        + 0.20 * noise_synthetic
+        + 0.15 * freq_synthetic
     )
-    score = float(max(0.05, min(0.95, raw_forensic_score)))
+    score = float(max(0.01, min(0.99, raw_forensic_score)))
 
     if score >= 0.55:
         pred = "LIKELY_AI_GENERATED"

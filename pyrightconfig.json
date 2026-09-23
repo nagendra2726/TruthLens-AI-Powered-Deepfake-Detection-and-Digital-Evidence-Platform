@@ -1,0 +1,12 @@
+{
+  "extraPaths": [
+    "./api",
+    "./sdk",
+    "."
+  ],
+  "include": [
+    "api",
+    "tests",
+    "sdk"
+  ]
+}

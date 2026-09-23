@@ -1,16 +1,109 @@
 /* frontend/src/App.css */
-/* Global base styles for TruthLens */
+/* Global base styles & modern animations for TruthLens */
 
-/* Spinner animation used by Compare Mode loading button */
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
 
-/* Fade-in animation reused across result cards */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+@keyframes scanLineAnim {
+  0% { top: 0%; opacity: 0.8; }
+  50% { top: 92%; opacity: 1; }
+  100% { top: 0%; opacity: 0.8; }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.03); opacity: 1; }
+}
+
+@keyframes floatSoft {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes badgeCycle {
+  0%, 30% { opacity: 1; }
+  33%, 97% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
 .animate-fade-in {
-  animation: fadeIn 0.35s ease both;
+  animation: fadeIn 0.4s ease-out both;
+}
+
+.hero-scan-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #2563EB, #60A5FA, transparent);
+  box-shadow: 0 0 12px #3B82F6, 0 0 4px #2563EB;
+  animation: scanLineAnim 3.5s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+  z-index: 10;
+}
+
+.hero-float-card {
+  animation: floatSoft 4s ease-in-out infinite;
+}
+
+.step-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 14px;
+  padding: 1.5rem;
+  transition: all 0.25s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.step-card:hover {
+  transform: translateY(-3px);
+  border-color: #93C5FD;
+  box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.08), 0 8px 10px -6px rgba(37, 99, 235, 0.04);
+}
+
+.capability-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 16px;
+  padding: 1.75rem 1.5rem;
+  transition: all 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.capability-card:hover {
+  transform: translateY(-4px);
+  border-color: #93C5FD;
+  box-shadow: 0 12px 28px -4px rgba(15, 23, 42, 0.08);
+}
+
+.why-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 14px;
+  padding: 1.5rem;
+  text-align: left;
+  transition: all 0.25s ease;
+}
+
+.why-card:hover {
+  border-color: #93C5FD;
+  transform: translateY(-2px);
+}
+
+/* Accessibility: respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .hero-scan-line,
+  .hero-float-card,
+  .animate-fade-in {
+    animation: none !important;
+    transition: none !important;
+  }
 }

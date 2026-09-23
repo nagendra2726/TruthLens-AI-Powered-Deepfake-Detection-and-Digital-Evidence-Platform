@@ -1,0 +1,98 @@
+{
+  "version": "2.0.0",
+  "last_updated": "2026-08-25",
+  "description": "DeepSafe Generator Surveillance Watchlist for continuous benchmark curation and retraining feeds.",
+  "watched_generators": {
+    "image": [
+      {
+        "id": "flux_1",
+        "name": "FLUX.1 [dev/schnell]",
+        "family": "Flow Matching / Rectified Flow",
+        "status": "active_monitoring",
+        "added_date": "2024-08-15",
+        "sample_source": "HuggingFace DeepSafe-benchmark"
+      },
+      {
+        "id": "midjourney_v6",
+        "name": "Midjourney v6/v7",
+        "family": "Diffusion",
+        "status": "active_monitoring",
+        "added_date": "2024-05-10",
+        "sample_source": "HuggingFace DeepSafe-benchmark"
+      },
+      {
+        "id": "sdxl_lightning",
+        "name": "SDXL Lightning / Turbo",
+        "family": "Adversarial Diffusion Distillation",
+        "status": "active_monitoring",
+        "added_date": "2024-03-01",
+        "sample_source": "HuggingFace DeepSafe-benchmark"
+      },
+      {
+        "id": "dalle_3",
+        "name": "DALL-E 3",
+        "family": "Diffusion",
+        "status": "active_monitoring",
+        "added_date": "2023-11-20",
+        "sample_source": "HuggingFace DeepSafe-benchmark"
+      }
+    ],
+    "video": [
+      {
+        "id": "sora",
+        "name": "OpenAI Sora / Sora Turbo",
+        "family": "Diffusion Transformer (DiT)",
+        "status": "active_monitoring",
+        "added_date": "2024-02-20",
+        "sample_source": "Curated Synthetic Video Corpus"
+      },
+      {
+        "id": "gen3_alpha",
+        "name": "Runway Gen-3 Alpha",
+        "family": "Diffusion Video",
+        "status": "active_monitoring",
+        "added_date": "2024-07-01",
+        "sample_source": "Curated Synthetic Video Corpus"
+      },
+      {
+        "id": "kling_ai",
+        "name": "Kling 1.5",
+        "family": "Diffusion Video",
+        "status": "active_monitoring",
+        "added_date": "2024-08-01",
+        "sample_source": "Curated Synthetic Video Corpus"
+      }
+    ],
+    "audio": [
+      {
+        "id": "elevenlabs_v2",
+        "name": "ElevenLabs Multilingual v2",
+        "family": "Neural Codec / Diffusion TTS",
+        "status": "active_monitoring",
+        "added_date": "2024-01-15",
+        "sample_source": "ASVspoof 2024 / DeepSafe-benchmark"
+      },
+      {
+        "id": "valle",
+        "name": "VALL-E / VALL-E X",
+        "family": "Neural Codec Language Model",
+        "status": "active_monitoring",
+        "added_date": "2023-09-10",
+        "sample_source": "ASVspoof 2024 / DeepSafe-benchmark"
+      },
+      {
+        "id": "hifigan",
+        "name": "HiFi-GAN Vocoder Attacks",
+        "family": "GAN Vocoder",
+        "status": "active_monitoring",
+        "added_date": "2023-06-01",
+        "sample_source": "ASVspoof 2024 / DeepSafe-benchmark"
+      }
+    ]
+  },
+  "retraining_triggers": {
+    "min_new_samples_per_generator": 100,
+    "disagreement_rate_threshold": 0.25,
+    "automatic_eval_interval_days": 14
+  }
+}

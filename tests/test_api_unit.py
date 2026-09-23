@@ -3,10 +3,11 @@ from fastapi.testclient import TestClient
 import sys
 import os
 
-# Add api directory to path to import main
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "api")))
+# Add project root and api directory to path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "api")))
 
-from main import app, get_current_user
+from api.main import app, get_current_user
 
 client = TestClient(app)
 

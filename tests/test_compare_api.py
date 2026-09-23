@@ -5,11 +5,12 @@ import os
 import json
 from unittest.mock import patch
 
-# Add api directory to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "api")))
+# Add project root and api directory to path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "api")))
 
-import main
-from main import app, build_authenticity_result
+from api import main
+from api.main import app, build_authenticity_result
 
 client = TestClient(app)
 
@@ -111,7 +112,7 @@ def sample_image_bytes():
 
 def test_compare_endpoint_both_real(sample_image_bytes):
     """TEST 1: Reference = Real, Suspected = Real."""
-    with patch("main.query_model_api") as mock_query:
+    with patch("api.main.query_model_api") as mock_query:
         mock_query.return_value = {
             "model": "npr_deepfakedetection",
             "probability": 0.05,
@@ -140,7 +141,7 @@ def test_compare_endpoint_both_real(sample_image_bytes):
 
 def test_compare_endpoint_ref_real_sus_ai(sample_image_bytes):
     """TEST 2: Reference = Real, Suspected = AI-generated."""
-    with patch("main.query_model_api") as mock_query:
+    with patch("api.main.query_model_api") as mock_query:
         call_count = 0
 
         def side_effect(model_name, media_type, encoded_media_content, threshold, req_id):
@@ -172,7 +173,7 @@ def test_compare_endpoint_ref_real_sus_ai(sample_image_bytes):
 
 def test_compare_endpoint_both_ai(sample_image_bytes):
     """TEST 3: Reference = AI-generated, Suspected = AI-generated."""
-    with patch("main.query_model_api") as mock_query:
+    with patch("api.main.query_model_api") as mock_query:
         mock_query.return_value = {
             "model": "npr_deepfakedetection",
             "probability": 0.88,
@@ -197,7 +198,7 @@ def test_compare_endpoint_both_ai(sample_image_bytes):
 
 def test_compare_endpoint_ref_ai_sus_real(sample_image_bytes):
     """TEST 4: Reference = AI-generated, Suspected = Real."""
-    with patch("main.query_model_api") as mock_query:
+    with patch("api.main.query_model_api") as mock_query:
         call_count = 0
 
         def side_effect(model_name, media_type, encoded_media_content, threshold, req_id):
@@ -229,7 +230,7 @@ def test_compare_endpoint_ref_ai_sus_real(sample_image_bytes):
 
 def test_compare_endpoint_one_invalid_file(sample_image_bytes):
     """TEST 6: One file is invalid (corrupt image), other is valid."""
-    with patch("main.query_model_api") as mock_query:
+    with patch("api.main.query_model_api") as mock_query:
         mock_query.return_value = {
             "model": "npr_deepfakedetection",
             "probability": 0.10,
@@ -264,7 +265,7 @@ def test_compare_endpoint_missing_file():
 
 def test_backward_compatibility_detect_endpoint(sample_image_bytes):
     """Regression test: verify original /detect endpoint continues to work untouched."""
-    with patch("main.query_model_api") as mock_query:
+    with patch("api.main.query_model_api") as mock_query:
         mock_query.return_value = {
             "model": "npr_deepfakedetection",
             "probability": 0.20,

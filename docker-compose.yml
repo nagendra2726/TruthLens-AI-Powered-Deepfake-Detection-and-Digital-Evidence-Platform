@@ -18,7 +18,8 @@ services:
     depends_on:
       - npr_deepfakedetection
       - universalfakedetect
-      # Add other future video/audio model service names here
+      - cross_efficient_vit
+      - aasist_audio
     networks:
       - deepsafe-network
 
@@ -157,16 +158,23 @@ services:
     #       cpus: '2.0' 
     #       memory: 4G
 
-  # --- Placeholder for future audio model service ---
-  # example_audio_model_1:
-  #   build: ./models/audio/example_audio_model_1
-  #   container_name: deepsafe-example-audio-model-1
-  #   ports:
-  #     - "8001:8001"
-  #   restart: unless-stopped
-  #   # ... environment ...
-  #   networks:
-  #     - deepsafe-network
+  # --- Audio Model Services ---
+  aasist_audio:
+    build:
+      context: .
+      dockerfile: models/audio/aasist_audio/Dockerfile
+    container_name: deepsafe-aasist-audio
+    ports:
+      - "6001:6001"
+    restart: unless-stopped
+    environment:
+      - MODEL_PORT=6001
+      - PRELOAD_MODEL=false
+      - MODEL_TIMEOUT=600
+      - USE_GPU=false
+    networks:
+      - deepsafe-network
+
 
   frontend:
     build: ./frontend

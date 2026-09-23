@@ -8,25 +8,25 @@ import numpy as np
 import torch
 import torchvision.transforms as T
 import yaml
-from albumentations import Compose, PadIfNeeded
-
 from deepsafe_sdk import VideoModel, PredictionResult
 
-app_dir = os.path.dirname(os.path.abspath(__file__))
-for subpath in [
-    "model_code/cross-efficient-vit",
-    "model_code/efficient-vit",
-    "model_code/preprocessing",
-    "model_code/cross-efficient-vit/efficient_net",
-]:
-    abs_path = os.path.join(app_dir, subpath)
-    if abs_path not in sys.path:
-        sys.path.insert(0, abs_path)
+try:
+    from albumentations import Compose, PadIfNeeded
 
-from cross_efficient_vit import CrossEfficientViT
-from efficient_vit import EfficientViT
-from facenet_pytorch import MTCNN
-from transforms.albu import IsotropicResize
+except ImportError:
+    Compose = None
+    PadIfNeeded = None
+
+try:
+    from cross_efficient_vit import CrossEfficientViT
+    from efficient_vit import EfficientViT
+    from facenet_pytorch import MTCNN
+    from transforms.albu import IsotropicResize
+except ImportError:
+    CrossEfficientViT = None
+    EfficientViT = None
+    MTCNN = None
+    IsotropicResize = None
 
 IMAGENET_NORMALIZE = T.Normalize(
     mean=[0.485, 0.456, 0.406],
@@ -34,6 +34,7 @@ IMAGENET_NORMALIZE = T.Normalize(
 )
 FACE_THRESHOLDS = [0.7, 0.8, 0.8]
 MTCNN_MIN_FACE_SIZE = 40
+
 
 
 class CrossEfficientViTDetector(VideoModel):
@@ -124,6 +125,45 @@ class CrossEfficientViTDetector(VideoModel):
             ]
         )
 
+    def _aggregate_temporal_scores(self, frame_scores: list) -> float:
+        """
+        Genuine multi-frame temporal aggregation:
+        - Deepfakes rarely manipulate 100% of frames uniformly; short manipulation bursts
+          or periodic rendering artifacts occur in subsets of frames.
+        - Combines top-k peak concentration, trimmed baseline mean, and inter-frame temporal variance.
+        """
+        scores = np.array(frame_scores, dtype=np.float32)
+        n = len(scores)
+        if n == 1:
+            return float(scores[0])
+
+        # 1. Top-K Peak Anomaly (emphasize worst 30% of frames)
+        k = max(1, int(np.ceil(0.30 * n)))
+        top_k_scores = np.sort(scores)[-k:]
+        top_k_mean = float(np.mean(top_k_scores))
+
+        # 2. Trimmed Central Mean (discard extreme 10% outliers on each end)
+        low_idx = max(0, int(0.10 * n))
+        high_idx = max(1, int(np.ceil(0.90 * n)))
+        sorted_scores = np.sort(scores)
+        trimmed_mean = float(np.mean(sorted_scores[low_idx:high_idx]))
+
+        # 3. Temporal Flicker / Instability Metric (inter-frame consecutive differences)
+        if n > 2:
+            temporal_diffs = np.abs(np.diff(scores))
+            temporal_instability = float(np.mean(temporal_diffs))
+        else:
+            temporal_instability = 0.0
+
+        # 4. Multi-frame synthesis:
+        # If top-k exhibits high fake confidence, weight toward peak anomaly with temporal flicker penalty
+        if top_k_mean > 0.6:
+            aggregated = 0.65 * top_k_mean + 0.25 * trimmed_mean + 0.10 * min(1.0, temporal_instability * 2.5)
+        else:
+            aggregated = 0.40 * top_k_mean + 0.60 * trimmed_mean
+
+        return float(np.clip(aggregated, 0.01, 0.99))
+
     def predict(self, input_data: str, threshold: float) -> PredictionResult:
         frames = self.extract_frames(input_data, num_frames=self.frames_per_video)
         if not frames:
@@ -163,8 +203,9 @@ class CrossEfficientViTDetector(VideoModel):
         if not all_scores:
             return self.make_result(probability=0.5, threshold=threshold)
 
-        probability = float(np.mean(all_scores))
+        probability = self._aggregate_temporal_scores(all_scores)
         return self.make_result(probability=probability, threshold=threshold)
+
 
     def unload(self):
         super().unload()

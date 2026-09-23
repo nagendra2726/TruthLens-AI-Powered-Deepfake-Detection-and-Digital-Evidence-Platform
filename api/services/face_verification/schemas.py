@@ -44,7 +44,16 @@ class FaceVerificationResult(BaseModel):
         default=0.65,
         description="Cosine similarity decision threshold"
     )
+    consent_declared: bool = Field(
+        default=False,
+        description="Ethical compliance: whether user explicitly affirmed consent/legal authority for reference face"
+    )
+    consent_source: Optional[str] = Field(
+        default=None,
+        description="Provenance of reference photo (e.g., 'subject_provided', 'law_enforcement_subpoena', 'public_directory_consented')"
+    )
     message: Optional[str] = Field(
         default=None,
         description="Explanatory or diagnostic message (e.g. why verification was unable to proceed)"
     )
+

@@ -1,0 +1,11 @@
+name: aasist_audio_detection
+version: 1.0.0
+media_type: audio
+entrypoint: detector.py
+model_class: detector.AASISTAudioDetector
+port: 8001
+description: AASIST-based spectro-temporal graph attention and acoustic anomaly detector for synthetic speech and audio deepfakes.
+weights:
+  - url: https://huggingface.co/siddharthksah/deepsafe-weights/resolve/main/aasist_best.pth
+    path: weights/aasist_best.pth
+    sha256: ""

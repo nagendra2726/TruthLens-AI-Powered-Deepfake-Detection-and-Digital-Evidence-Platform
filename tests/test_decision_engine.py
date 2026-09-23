@@ -11,21 +11,39 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "api"))
 
 import pytest
-from services.decision_engine import (
-    run_decision_engine,
-    CAT_LIKELY_AUTHENTIC,
-    CAT_POTENTIAL_DEEPFAKE,
-    CAT_BOTH_SYNTHETIC,
-    CAT_AI_DIFF_PERSON,
-    CAT_SYNTH_REF_AUTH_SUS,
-    CAT_AUTH_DIFF_PERSON,
-    CAT_INCONCLUSIVE,
-    CAT_UNABLE_TO_VERIFY,
-    RISK_HIGH,
-    RISK_MEDIUM,
-    RISK_LOW,
-    RISK_UNKNOWN,
-)
+
+try:
+    from services.decision_engine import (
+        run_decision_engine,
+        CAT_LIKELY_AUTHENTIC,
+        CAT_POTENTIAL_DEEPFAKE,
+        CAT_BOTH_SYNTHETIC,
+        CAT_AI_DIFF_PERSON,
+        CAT_SYNTH_REF_AUTH_SUS,
+        CAT_AUTH_DIFF_PERSON,
+        CAT_INCONCLUSIVE,
+        CAT_UNABLE_TO_VERIFY,
+        RISK_HIGH,
+        RISK_MEDIUM,
+        RISK_LOW,
+        RISK_UNKNOWN,
+    )
+except ImportError:
+    from api.services.decision_engine import (
+        run_decision_engine,
+        CAT_LIKELY_AUTHENTIC,
+        CAT_POTENTIAL_DEEPFAKE,
+        CAT_BOTH_SYNTHETIC,
+        CAT_AI_DIFF_PERSON,
+        CAT_SYNTH_REF_AUTH_SUS,
+        CAT_AUTH_DIFF_PERSON,
+        CAT_INCONCLUSIVE,
+        CAT_UNABLE_TO_VERIFY,
+        RISK_HIGH,
+        RISK_MEDIUM,
+        RISK_LOW,
+        RISK_UNKNOWN,
+    )
 
 # ---------------------------------------------------------------------------
 # Helpers for building mock analysis dicts matching Task 1/2 schemas

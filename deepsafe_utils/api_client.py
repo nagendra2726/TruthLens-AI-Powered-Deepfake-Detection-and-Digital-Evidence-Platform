@@ -209,20 +209,22 @@ class APIClient:
     def test_with_main_api(
         self,
         media_path: str,
-        media_type_for_api: str,
-        encoded_media: str,
-        threshold: float,
-        ensemble_method: str,
+        media_type_for_api: Optional[str] = None,
+        encoded_media: str = "",
+        threshold: float = 0.5,
+        ensemble_method: str = "average",
         selected_models_for_api: Optional[List[str]] = None,
+        media_type: Optional[str] = None,
     ) -> Dict[str, Any]:
+        actual_media_type = media_type_for_api or media_type or self.media_type
         predict_url = f"{self.api_url}/predict"
         payload = {
-            "media_type": media_type_for_api,
+            "media_type": actual_media_type,
             "threshold": threshold,
             "ensemble_method": ensemble_method,
         }
 
-        payload_key = MEDIA_TYPE_PAYLOAD_KEYS.get(media_type_for_api)
+        payload_key = MEDIA_TYPE_PAYLOAD_KEYS.get(actual_media_type)
         if not payload_key:
             return {
                 "error": f"Unsupported media_type '{media_type_for_api}' for main API payload key mapping"

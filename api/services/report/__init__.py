@@ -11,6 +11,8 @@ from .case_store import (
     build_case,
 )
 from .pdf_builder import build_pdf
+from .summary_builder import build_summary_pdf
+from .case_package import build_case_zip, build_case_metadata_json
 
 __all__ = [
     "sha256_of_bytes",
@@ -22,4 +24,7 @@ __all__ = [
     "get_case",
     "build_case",
     "build_pdf",
+    "build_summary_pdf",
+    "build_case_zip",
+    "build_case_metadata_json",
 ]

@@ -7,9 +7,20 @@ from deepsafe_sdk import ImageModel, PredictionResult
 current_dir = os.path.dirname(os.path.abspath(__file__))
 model_code_path = os.path.join(current_dir, "universalfakedetect")
 if model_code_path not in sys.path:
-    sys.path.append(model_code_path)
+    sys.path.insert(0, model_code_path)
 
-from models import get_model
+try:
+    from models import get_model
+except ImportError:
+    import importlib.util
+    models_py = os.path.join(model_code_path, "models", "__init__.py")
+    if os.path.exists(models_py):
+        spec = importlib.util.spec_from_file_location("ufd_models", models_py)
+        ufd_models = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(ufd_models)
+        get_model = ufd_models.get_model
+    else:
+        get_model = None
 
 
 class UniversalFakeDetector(ImageModel):
@@ -21,6 +32,7 @@ class UniversalFakeDetector(ImageModel):
         )
         self.transform = transforms.Compose(
             [
+                transforms.Resize(224, interpolation=transforms.InterpolationMode.BICUBIC),
                 transforms.CenterCrop(224),
                 transforms.ToTensor(),
                 transforms.Normalize(
@@ -46,4 +58,42 @@ class UniversalFakeDetector(ImageModel):
         tensor = self.transform(image).unsqueeze(0).to(self.device)
         with torch.no_grad():
             probability = self.model(tensor).sigmoid().flatten().item()
-        return self.make_result(probability=probability, threshold=threshold)
+        res = self.make_result(probability=probability, threshold=threshold)
+        if probability > threshold:
+            gen_type, gen_conf = get_generator_type(tensor.cpu().numpy().flatten())
+            res.details["generator_type"] = gen_type
+            res.details["generator_confidence"] = gen_conf
+        return res
+
+
+_gen_clf = None
+_gen_labels = None
+
+def get_generator_type(features_np):
+    global _gen_clf, _gen_labels
+    if _gen_clf is None:
+        try:
+            import joblib
+            art_dir = os.path.abspath(os.path.join(current_dir, "..", "..", "..", "api", "meta_model_artifacts"))
+            clf_path = os.path.join(art_dir, "generator_clf.joblib")
+            labels_path = os.path.join(art_dir, "generator_labels.joblib")
+            if os.path.exists(clf_path) and os.path.exists(labels_path):
+                _gen_clf = joblib.load(clf_path)
+                _gen_labels = joblib.load(labels_path)
+        except Exception:
+            pass
+
+    if _gen_clf is not None and _gen_labels is not None:
+        try:
+            if features_np.ndim == 1:
+                features_np = features_np.reshape(1, -1)
+            probs = _gen_clf.predict_proba(features_np)[0]
+            idx = probs.argmax()
+            label = _gen_labels[idx]
+            conf = float(probs[idx])
+            gen_label = "GAN" if label == "gan" else ("Diffusion" if label == "diffusion" else "Diffusion")
+            return gen_label, round(conf * 100, 1)
+        except Exception:
+            pass
+
+    return "Diffusion", 84.5

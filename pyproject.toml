@@ -22,3 +22,8 @@ extend-exclude = '''
 [tool.isort]
 profile = "black"
 multi_line_output = 3
+
+[tool.pyright]
+include = ["api", "tests", "sdk"]
+extraPaths = ["api", "sdk", "."]
+

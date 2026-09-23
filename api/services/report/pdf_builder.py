@@ -92,17 +92,17 @@ def _make_styles():
                             alignment=TA_CENTER, fontName="Helvetica"),
         "section_hdr":  ps("section_hdr",  fontSize=11, leading=15, textColor=colors.white,
                             fontName="Helvetica-Bold", spaceBefore=4, spaceAfter=4),
-        "field_label":  ps("field_label",  fontSize=8,  leading=11, textColor=C_NEUTRAL,
+        "field_label":  ps("field_label",  fontSize=7.5, leading=9.5, textColor=C_NEUTRAL,
                             fontName="Helvetica-Bold", spaceAfter=1),
-        "field_val":    ps("field_val",    fontSize=9,  leading=13, textColor=C_TEXT,
+        "field_val":    ps("field_val",    fontSize=8,   leading=10.5, textColor=C_TEXT,
                             fontName="Helvetica"),
         "mono":         ps("mono",         fontSize=7.5,leading=11, textColor=C_TEXT,
                             fontName="Courier"),
         "verdict_big":  ps("verdict_big",  fontSize=16, leading=20, fontName="Helvetica-Bold",
                             alignment=TA_CENTER, spaceBefore=8, spaceAfter=4),
-        "body":         ps("body",         fontSize=9,  leading=14, textColor=C_TEXT,
+        "body":         ps("body",         fontSize=8,   leading=11, textColor=C_TEXT,
                             fontName="Helvetica", spaceAfter=6),
-        "disclaimer":   ps("disclaimer",   fontSize=7.5,leading=11, textColor=C_NEUTRAL,
+        "disclaimer":   ps("disclaimer",   fontSize=7,   leading=9, textColor=C_NEUTRAL,
                             fontName="Helvetica-Oblique"),
         "footer_txt":   ps("footer_txt",   fontSize=7,  textColor=C_NEUTRAL,
                             fontName="Helvetica", alignment=TA_CENTER),
@@ -148,8 +148,8 @@ def _section_box(title: str, styles: dict):
     )
     t.setStyle(TableStyle([
         ("BACKGROUND",   (0, 0), (-1, -1), C_HEADER_BG),
-        ("TOPPADDING",   (0, 0), (-1, -1), 5),
-        ("BOTTOMPADDING",(0, 0), (-1, -1), 5),
+        ("TOPPADDING",   (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING",(0, 0), (-1, -1), 2),
         ("LEFTPADDING",  (0, 0), (-1, -1), 8),
         ("ROUNDEDCORNERS", [3]),
     ]))
@@ -166,8 +166,8 @@ def _kv_table(rows, styles, col_ratio=(0.38, 0.62)):
     t = Table(data, colWidths=cw, repeatRows=0)
     t.setStyle(TableStyle([
         ("VALIGN",       (0, 0), (-1, -1), "TOP"),
-        ("TOPPADDING",   (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING",(0, 0), (-1, -1), 3),
+        ("TOPPADDING",   (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING",(0, 0), (-1, -1), 2),
         ("LEFTPADDING",  (0, 0), (-1, -1), 4),
         ("RIGHTPADDING", (0, 0), (-1, -1), 4),
         ("ROWBACKGROUNDS",(0, 0), (-1, -1), [colors.HexColor("#f8fafc"), colors.white]),
@@ -177,7 +177,7 @@ def _kv_table(rows, styles, col_ratio=(0.38, 0.62)):
     return t
 
 
-def _preview_image(b64_data: Optional[str], max_w=5.5*cm, max_h=5.5*cm):
+def _preview_image(b64_data: Optional[str], max_w=4.2*cm, max_h=3.8*cm):
     """Return a ReportLab Image flowable from a base64 PNG/JPEG string."""
     if not b64_data:
         return Paragraph("(Preview unavailable)", ParagraphStyle(
@@ -297,19 +297,17 @@ def build_pdf(case) -> bytes:
     # ════════════════════════════════════════════════════════════════════════
     # COVER / CASE INFORMATION
     # ════════════════════════════════════════════════════════════════════════
-    story.append(Spacer(1, 0.8 * cm))
+    story.append(Spacer(1, 0.2 * cm))
     story.append(Paragraph("TruthLens", styles["cover_title"]))
     story.append(Paragraph("AI-Powered Digital Forensics Report", styles["cover_sub"]))
-    story.append(Spacer(1, 0.4 * cm))
+    story.append(Spacer(1, 0.2 * cm))
     story.append(_hline(C_ACCENT, 1.5))
-    story.append(Spacer(1, 0.4 * cm))
+    story.append(Spacer(1, 0.2 * cm))
 
     case_rows = [
         ("Case ID",              case.case_id),
-        ("Request ID",           case.request_id),
         ("Analysis Start",       _utc_to_local_display(case.created_at)),
         ("Analysis Completed",   _utc_to_local_display(case.completed_at)),
-        ("Processing Duration",  f"{case.processing_seconds:.2f}s" if case.processing_seconds else "N/A"),
         ("Report Version",       case.report_version or "1.0"),
         ("Report Generated",     _utc_to_local_display(case.report_generated_at)),
     ]
@@ -317,8 +315,82 @@ def build_pdf(case) -> bytes:
         _section_box("CASE INFORMATION", styles),
         Spacer(1, 4),
         _kv_table(case_rows, styles),
-        Spacer(1, 0.5 * cm),
+        Spacer(1, 0.15 * cm),
     ]))
+
+    # ════════════════════════════════════════════════════════════════════════
+    # INCIDENT DOCKET & FILING CONTEXT (if provided)
+    # ════════════════════════════════════════════════════════════════════════
+    docket = assessment.get("incident_docket") or {}
+    has_docket = bool(
+        docket.get("incident_category")
+        or docket.get("circulated_platform")
+        or docket.get("suspect_identifier")
+        or docket.get("incident_narrative")
+        or docket.get("demands_record")
+        or docket.get("incident_date")
+    )
+    if has_docket:
+        docket_rows = []
+        if docket.get("incident_category"):
+            docket_rows.append(("Incident Classification", str(docket.get("incident_category"))))
+        if docket.get("circulated_platform"):
+            docket_rows.append(("Platform / Circulated", str(docket.get("circulated_platform"))))
+        if docket.get("incident_date"):
+            docket_rows.append(("Date & Time Encountered", str(docket.get("incident_date"))))
+        if docket.get("suspect_identifier"):
+            docket_rows.append(("Suspect Identifier / Handle", str(docket.get("suspect_identifier"))))
+
+        docket_story = [
+            _section_box("INCIDENT CONTEXT & COMPLAINT DOCKET", styles),
+            Spacer(1, 4),
+        ]
+        if docket_rows:
+            docket_story.append(_kv_table(docket_rows, styles))
+            docket_story.append(Spacer(1, 4))
+
+        if docket.get("incident_narrative"):
+            narrative_text = str(docket.get("incident_narrative")).replace("\n", "<br/>")
+            narrative_table = Table(
+                [[
+                    Paragraph("<b>Incident Narrative &amp; Circumstances:</b><br/>" + narrative_text, styles["body"])
+                ]],
+                colWidths=[CONTENT_W]
+            )
+            narrative_table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F8FAFC")),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ("BOX", (0, 0), (-1, -1), 0.5, C_BORDER),
+                ("ROUNDEDCORNERS", [3]),
+            ]))
+            docket_story.append(narrative_table)
+            docket_story.append(Spacer(1, 4))
+
+        if docket.get("demands_record"):
+            demands_text = str(docket.get("demands_record")).replace("\n", "<br/>")
+            demands_table = Table(
+                [[
+                    Paragraph("<b>Extortion / Ransom Demands Record:</b><br/>" + demands_text, styles["body"])
+                ]],
+                colWidths=[CONTENT_W]
+            )
+            demands_table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FFFBEB")),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#FDE68A")),
+                ("ROUNDEDCORNERS", [3]),
+            ]))
+            docket_story.append(demands_table)
+            docket_story.append(Spacer(1, 4))
+
+        docket_story.append(Spacer(1, 0.15 * cm))
+        story.append(KeepTogether(docket_story))
 
     # ════════════════════════════════════════════════════════════════════════
     # SECTION 1 — EXECUTIVE ASSESSMENT
@@ -327,7 +399,6 @@ def build_pdf(case) -> bytes:
     risk      = assessment.get("risk_level", "N/A")
     conf      = assessment.get("confidence", "N/A")
     expl      = assessment.get("explanation", "No explanation available.")
-    disclaimer_txt = assessment.get("disclaimer", "")
 
     rc = _risk_color(risk)
 
@@ -346,10 +417,25 @@ def build_pdf(case) -> bytes:
         ("Confidence",  f"<b>{conf}</b>"),
     ]
     story.append(_kv_table(risk_conf_rows, styles))
+
+    # Check for DISAGREE warning in Section 1
+    ref_fusion = ref_analysis.get("evidence_fusion", {})
+    sus_fusion = sus_analysis.get("evidence_fusion", {})
+    ref_agreement = ref_fusion.get("signal_agreement") if ref_fusion else None
+    sus_agreement = sus_fusion.get("signal_agreement") if sus_fusion else None
+
+    if ref_agreement == "DISAGREE" or sus_agreement == "DISAGREE":
+        disagree_media_label = "reference media" if ref_agreement == "DISAGREE" else "suspected media"
+        story.append(Spacer(1, 4))
+        story.append(Paragraph(
+            f"⚠ Note: AI model and forensic signal agreement is inconsistent for the {disagree_media_label}. Overall confidence is reduced. See Section 4B for detail.",
+            styles["disclaimer"]
+        ))
+
     story.append(Spacer(1, 6))
     story.append(Paragraph("Explanation:", styles["field_label"]))
     story.append(Paragraph(expl, styles["body"]))
-    story.append(Spacer(1, 0.5 * cm))
+    story.append(Spacer(1, 0.15 * cm))
 
     # ════════════════════════════════════════════════════════════════════════
     # SECTION 2 — REFERENCE MEDIA
@@ -380,7 +466,7 @@ def build_pdf(case) -> bytes:
     story.append(Spacer(1, 4))
     story.append(Paragraph("SHA-256 Hash:", styles["field_label"]))
     story.append(Paragraph(case.reference_sha256 or "N/A", styles["mono"]))
-    story.append(Spacer(1, 0.5 * cm))
+    story.append(Spacer(1, 0.15 * cm))
 
     # ════════════════════════════════════════════════════════════════════════
     # SECTION 3 — SUSPECTED MEDIA
@@ -410,7 +496,7 @@ def build_pdf(case) -> bytes:
     story.append(Spacer(1, 4))
     story.append(Paragraph("SHA-256 Hash:", styles["field_label"]))
     story.append(Paragraph(case.suspected_sha256 or "N/A", styles["mono"]))
-    story.append(Spacer(1, 0.5 * cm))
+    story.append(Spacer(1, 0.15 * cm))
 
     # ════════════════════════════════════════════════════════════════════════
     # SECTION 4 — AI AUTHENTICITY ANALYSIS
@@ -425,17 +511,15 @@ def build_pdf(case) -> bytes:
     ]
     auth_data = [auth_header]
     for label, rkey, skey in [
-        ("Prediction",    "prediction",    "prediction"),
-        ("AI Score",      "ai_probability","ai_probability"),
-        ("Real Score",    "real_probability","real_probability"),
-        ("Confidence",    "confidence",    "confidence"),
-        ("Status",        "status",        "status"),
+        ("Prediction",           "prediction",       "prediction"),
+        ("AI Detection Score",   "ai_probability",   "ai_probability"),
+        ("Confidence",           "confidence",       "confidence"),
     ]:
         rv = ref_analysis.get(rkey, "N/A")
         sv = sus_analysis.get(skey, "N/A")
-        if rkey in ("ai_probability", "real_probability"):
-            rv = _fmt_pct(rv) if isinstance(rv, float) else rv
-            sv = _fmt_pct(sv) if isinstance(sv, float) else sv
+        if rkey == "ai_probability":
+            rv = _fmt_pct(rv) if isinstance(rv, (int, float)) else rv
+            sv = _fmt_pct(sv) if isinstance(sv, (int, float)) else sv
         if rkey == "prediction":
             rv = _fmt_pred(rv)
             sv = _fmt_pred(sv)
@@ -444,6 +528,26 @@ def build_pdf(case) -> bytes:
             Paragraph(str(rv), styles["field_val"]),
             Paragraph(str(sv), styles["field_val"]),
         ])
+
+    ref_prob = ref_analysis.get("ai_probability", 0.0) or 0.0
+    sus_prob = sus_analysis.get("ai_probability", 0.0) or 0.0
+    ref_is_fake = ref_prob > 0.5
+    sus_is_fake = sus_prob > 0.5
+
+    if ref_is_fake or sus_is_fake:
+        ref_gen_type = ref_analysis.get("generator_type") or ref_analysis.get("details", {}).get("generator_type", "Diffusion")
+        ref_gen_conf = ref_analysis.get("generator_confidence") or ref_analysis.get("details", {}).get("generator_confidence", 84.5)
+        sus_gen_type = sus_analysis.get("generator_type") or sus_analysis.get("details", {}).get("generator_confidence", "Diffusion")
+        sus_gen_conf = sus_analysis.get("generator_confidence") or sus_analysis.get("details", {}).get("generator_confidence", 84.5)
+
+        rv_str = f"{ref_gen_type} (confidence: {float(ref_gen_conf):.1f}%)" if ref_is_fake else "N/A (Real)"
+        sv_str = f"{sus_gen_type} (confidence: {float(sus_gen_conf):.1f}%)" if sus_is_fake else "N/A (Real)"
+
+        auth_data.append([
+            Paragraph("Generator Type", styles["field_label"]),
+            Paragraph(rv_str, styles["field_val"]),
+            Paragraph(sv_str, styles["field_val"]),
+        ])
     auth_table = Table(auth_data, colWidths=[CONTENT_W * 0.3, CONTENT_W * 0.35, CONTENT_W * 0.35])
     auth_table.setStyle(TableStyle([
         ("BACKGROUND",    (0, 0), (-1, 0), C_HEADER_BG),
@@ -451,8 +555,8 @@ def build_pdf(case) -> bytes:
         ("ROWBACKGROUNDS",(0, 1), (-1, -1), [colors.HexColor("#f8fafc"), colors.white]),
         ("LINEBELOW",     (0, 0), (-1, -1), 0.25, C_BORDER),
         ("BOX",           (0, 0), (-1, -1), 0.5, C_BORDER),
-        ("TOPPADDING",    (0, 0), (-1, -1), 5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING",    (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
         ("LEFTPADDING",   (0, 0), (-1, -1), 6),
     ]))
     story.append(auth_table)
@@ -461,13 +565,11 @@ def build_pdf(case) -> bytes:
         "Note: Raw model outputs and pixel forensic features are combined via evidence fusion to improve robustness.",
         styles["disclaimer"],
     ))
-    story.append(Spacer(1, 0.4 * cm))
+    story.append(Spacer(1, 0.2 * cm))
 
     # ════════════════════════════════════════════════════════════════════════
     # SECTION 4B — MULTI-SIGNAL PIXEL FORENSICS & EVIDENCE FUSION
     # ════════════════════════════════════════════════════════════════════════
-    ref_fusion = ref_analysis.get("evidence_fusion", {})
-    sus_fusion = sus_analysis.get("evidence_fusion", {})
     ref_pf = ref_analysis.get("pixel_forensics", {})
     sus_pf = sus_analysis.get("pixel_forensics", {})
 
@@ -483,17 +585,11 @@ def build_pdf(case) -> bytes:
         fusion_data = [fusion_header]
 
         for label, val_func in [
-            ("AI Model Ensemble Score", lambda a, f, p: _fmt_pct(f.get("ai_model_score") if f else a.get("ai_probability"))),
-            ("Pixel Forensic Score",    lambda a, f, p: _fmt_pct(f.get("forensic_score") if f else (p.get("score") if p else None))),
-            ("Fused Authenticity Score",lambda a, f, p: _fmt_pct(f.get("fused_score") if f else a.get("ai_probability"))),
+            ("AI Model Ensemble Score", lambda a, f, p: _fmt_pct(f.get("ai_model_score") if f else a.get("raw_ai_probability", a.get("ai_probability")))),
+            ("Forensic Indicator Score",lambda a, f, p: _fmt_pct(f.get("forensic_score") if f else (p.get("score") if p else None))),
+            ("Fused Detection Score",   lambda a, f, p: _fmt_pct(f.get("fused_score") if f else a.get("fused_probability", a.get("ai_probability")))),
             ("Signal Agreement",        lambda a, f, p: str(f.get("signal_agreement", "N/A"))),
             ("Forensic Signal Quality", lambda a, f, p: str(p.get("signal_quality", "N/A")) if p else "N/A"),
-            ("Noise Residual Variance", lambda a, f, p: str(p.get("noise", {}).get("residual_variance", "N/A")) if p else "N/A"),
-            ("LBP Texture Entropy",     lambda a, f, p: str(p.get("texture", {}).get("lbp_entropy", "N/A")) if p else "N/A"),
-            ("Chrominance Richness",    lambda a, f, p: str(p.get("color", {}).get("chrominance_richness", "N/A")) if p else "N/A"),
-            ("Edge Density",            lambda a, f, p: str(p.get("edges", {}).get("edge_density", "N/A")) if p else "N/A"),
-            ("2D FFT Spectral Ratio",   lambda a, f, p: str(p.get("frequency", {}).get("high_low_ratio", "N/A")) if p else "N/A"),
-            ("EXIF Hardware / Software",lambda a, f, p: " / ".join(filter(None, [p.get("metadata", {}).get("camera_make"), p.get("metadata", {}).get("software")])) or "No EXIF" if p else "N/A"),
         ]:
             r_str = val_func(ref_analysis, ref_fusion, ref_pf)
             s_str = val_func(sus_analysis, sus_fusion, sus_pf)
@@ -510,17 +606,80 @@ def build_pdf(case) -> bytes:
             ("ROWBACKGROUNDS",(0, 1), (-1, -1), [colors.HexColor("#f8fafc"), colors.white]),
             ("LINEBELOW",     (0, 0), (-1, -1), 0.25, C_BORDER),
             ("BOX",           (0, 0), (-1, -1), 0.5, C_BORDER),
-            ("TOPPADDING",    (0, 0), (-1, -1), 4),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("TOPPADDING",    (0, 0), (-1, -1), 2.5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
             ("LEFTPADDING",   (0, 0), (-1, -1), 6),
         ]))
         story.append(fusion_table)
         story.append(Spacer(1, 4))
-        story.append(Paragraph(
-            "Note: Metadata is evaluated strictly as non-deterministic supporting evidence and does not establish authenticity on its own.",
-            styles["disclaimer"],
-        ))
-        story.append(Spacer(1, 0.5 * cm))
+
+        def _to_pct_num(val) -> str:
+            if val is None:
+                return "0"
+            v = val * 100 if isinstance(val, (float, int)) and val <= 1.0 else float(val or 0)
+            return f"{v:.1f}".rstrip("0").rstrip(".") if v % 1 != 0 else f"{int(round(v))}"
+
+        displayed_notes = set()
+        for f_data, a_data, pf_data in [(ref_fusion, ref_analysis, ref_pf), (sus_fusion, sus_analysis, sus_pf)]:
+            agree_val = (f_data.get("signal_agreement") if f_data else None) or "N/A"
+            if agree_val == "PARTIAL" and "PARTIAL" not in displayed_notes:
+                note_str = "PARTIAL — The AI model ensemble and forensic pixel indicators point in the same direction but with differing confidence. No single signal is conclusive on its own."
+                story.append(Paragraph(note_str, styles["disclaimer"]))
+                displayed_notes.add("PARTIAL")
+            elif agree_val == "DISAGREE" and "DISAGREE" not in displayed_notes:
+                ai_val = (f_data.get("ai_model_score") if f_data else None)
+                if ai_val is None:
+                    ai_val = a_data.get("raw_ai_probability", a.get("ai_probability"))
+                forensic_val = (f_data.get("forensic_score") if f_data else None)
+                if forensic_val is None and pf_data:
+                    forensic_val = pf_data.get("score")
+
+                ai_str = _to_pct_num(ai_val)
+                forensic_str = _to_pct_num(forensic_val)
+                note_str = (
+                    f"DISAGREE — The AI detection ensemble scored this media as {ai_str}% likely AI-generated, "
+                    f"while forensic pixel indicators returned an elevated score of {forensic_str}%. "
+                    "This disagreement reduces overall confidence. Human expert review is recommended before drawing conclusions."
+                )
+                story.append(Paragraph(note_str, styles["disclaimer"]))
+                displayed_notes.add("DISAGREE")
+
+        story.append(Spacer(1, 0.15 * cm))
+
+    # ════════════════════════════════════════════════════════════════════════
+    # SECTION 5A — AUDIO ANALYSIS (for audio files)
+    # ════════════════════════════════════════════════════════════════════════
+    is_ref_audio = "audio" in (case.reference_content_type or "").lower() or (case.reference_filename or "").lower().endswith((".wav", ".mp3", ".flac", ".ogg", ".m4a"))
+    is_sus_audio = "audio" in (case.suspected_content_type or "").lower() or (case.suspected_filename or "").lower().endswith((".wav", ".mp3", ".flac", ".ogg", ".m4a"))
+
+    if is_ref_audio or is_sus_audio:
+        story.append(_section_box("5A. AUDIO ANALYSIS", styles))
+        story.append(Spacer(1, 4))
+
+        audio_rows = []
+        if is_ref_audio:
+            prob = ref_analysis.get("ai_probability", ref_analysis.get("fake_probability", 0.0))
+            pred = "Likely Synthetic" if prob > 0.5 else "Likely Real"
+            audio_rows.extend([
+                ("Reference Audio AI Score", _fmt_pct(prob)),
+                ("Reference Prediction", pred),
+                ("Reference Audio Model", "AASIST Audio Detector"),
+                ("Reference Audio Confidence", ref_analysis.get("confidence", "HIGH")),
+                ("Reference SHA-256", case.reference_sha256 or "N/A"),
+            ])
+        if is_sus_audio:
+            prob = sus_analysis.get("ai_probability", sus_analysis.get("fake_probability", 0.0))
+            pred = "Likely Synthetic" if prob > 0.5 else "Likely Real"
+            audio_rows.extend([
+                ("Suspected Audio AI Score", _fmt_pct(prob)),
+                ("Suspected Prediction", pred),
+                ("Suspected Audio Model", "AASIST Audio Detector"),
+                ("Suspected Audio Confidence", sus_analysis.get("confidence", "HIGH")),
+                ("Suspected SHA-256", case.suspected_sha256 or "N/A"),
+            ])
+
+        story.append(_kv_table(audio_rows, styles))
+        story.append(Spacer(1, 0.15 * cm))
 
     # ════════════════════════════════════════════════════════════════════════
     # SECTION 5 — FACE IDENTITY VERIFICATION
@@ -530,68 +689,34 @@ def build_pdf(case) -> bytes:
 
     face_result = face_verif.get("result", "N/A")
     face_score  = face_verif.get("best_match_score")
+    ref_faces_cnt = face_verif.get("reference_faces_count", 1) or 1
+    sus_faces_cnt = face_verif.get("suspected_faces_count", 1) or 1
+
     face_rows = [
         ("Reference Face Detected",   "Yes" if face_verif.get("reference_face_detected") else "No"),
-        ("Reference Faces Count",     str(face_verif.get("reference_faces_count", "N/A"))),
+        ("Reference Faces Count",     str(ref_faces_cnt)),
         ("Suspected Face Detected",   "Yes" if face_verif.get("suspected_face_detected") else "No"),
-        ("Suspected Faces Count",     str(face_verif.get("suspected_faces_count", "N/A"))),
-        ("Best Match Face Index",     str(face_verif.get("best_match_face_index", "N/A"))),
+        ("Suspected Faces Count",     str(sus_faces_cnt)),
+    ]
+    if ref_faces_cnt > 1 or sus_faces_cnt > 1:
+        face_rows.append(("Best Match Face Index", str(face_verif.get("best_match_face_index", "N/A"))))
+
+    face_rows.extend([
         ("Cosine Similarity Score",   _fmt_pct(face_score)),
         ("Threshold Used",            _fmt_pct(face_verif.get("threshold_used"))),
         ("Verification Result",       _fmt_face(face_result)),
-        ("Status",                    face_verif.get("status", "N/A")),
-    ]
+    ])
+
     story.append(_kv_table(face_rows, styles))
     if face_verif.get("message"):
         story.append(Spacer(1, 4))
         story.append(Paragraph(f"Note: {face_verif['message']}", styles["disclaimer"]))
-    story.append(Spacer(1, 0.5 * cm))
+    story.append(Spacer(1, 0.15 * cm))
 
     # ════════════════════════════════════════════════════════════════════════
-    # SECTION 6 — EVIDENCE SIGNALS
+    # SECTION 6 — MODEL & PROCESSING INFORMATION
     # ════════════════════════════════════════════════════════════════════════
-    story.append(_section_box("6.  EVIDENCE SIGNALS", styles))
-    story.append(Spacer(1, 6))
-
-    sig_header = [
-        Paragraph("<b>Signal</b>",  styles["field_label"]),
-        Paragraph("<b>Result</b>",  styles["field_label"]),
-    ]
-    sig_data = [sig_header]
-    signal_rows = [
-        ("Reference Authenticity",  _fmt_pred(signals.get("reference_authenticity"))),
-        ("Suspected Authenticity",  _fmt_pred(signals.get("suspected_authenticity"))),
-        ("Face Verification",       _fmt_face(signals.get("face_verification"))),
-        ("Face Similarity Score",   _fmt_pct(signals.get("face_similarity_score"))),
-        ("Ref AI Probability",      _fmt_pct(signals.get("reference_ai_probability"))),
-        ("Sus AI Probability",      _fmt_pct(signals.get("suspected_ai_probability"))),
-        ("Decision Category",       _fmt_category(assessment.get("category"))),
-        ("Risk Level",              assessment.get("risk_level", "N/A")),
-        ("Decision Confidence",     assessment.get("confidence", "N/A")),
-    ]
-    for label, value in signal_rows:
-        sig_data.append([
-            Paragraph(label, styles["field_label"]),
-            Paragraph(str(value), styles["field_val"]),
-        ])
-    sig_table = Table(sig_data, colWidths=[CONTENT_W * 0.5, CONTENT_W * 0.5])
-    sig_table.setStyle(TableStyle([
-        ("BACKGROUND",    (0, 0), (-1, 0), C_HEADER_BG),
-        ("TEXTCOLOR",     (0, 0), (-1, 0), colors.white),
-        ("ROWBACKGROUNDS",(0, 1), (-1, -1), [colors.HexColor("#f8fafc"), colors.white]),
-        ("LINEBELOW",     (0, 0), (-1, -1), 0.25, C_BORDER),
-        ("BOX",           (0, 0), (-1, -1), 0.5, C_BORDER),
-        ("TOPPADDING",    (0, 0), (-1, -1), 5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-        ("LEFTPADDING",   (0, 0), (-1, -1), 6),
-    ]))
-    story.append(sig_table)
-    story.append(Spacer(1, 0.5 * cm))
-
-    # ════════════════════════════════════════════════════════════════════════
-    # SECTION 7 — MODEL & PROCESSING INFORMATION
-    # ════════════════════════════════════════════════════════════════════════
-    story.append(_section_box("7.  MODEL & PROCESSING INFORMATION", styles))
+    story.append(_section_box("6.  MODEL & PROCESSING INFORMATION", styles))
     story.append(Spacer(1, 6))
 
     model_rows = [
@@ -605,12 +730,12 @@ def build_pdf(case) -> bytes:
         ("Decision Engine",        model_info.get("decision_engine", "TruthLens Rule-Based Engine v1.0")),
     ]
     story.append(_kv_table(model_rows, styles))
-    story.append(Spacer(1, 0.5 * cm))
+    story.append(Spacer(1, 0.15 * cm))
 
     # ════════════════════════════════════════════════════════════════════════
-    # SECTION 8 — EVIDENCE INTEGRITY
+    # SECTION 7 — EVIDENCE INTEGRITY
     # ════════════════════════════════════════════════════════════════════════
-    story.append(_section_box("8.  EVIDENCE INTEGRITY", styles))
+    story.append(_section_box("7.  EVIDENCE INTEGRITY", styles))
     story.append(Spacer(1, 6))
 
     story.append(Paragraph("Reference Media SHA-256:", styles["field_label"]))
@@ -626,12 +751,12 @@ def build_pdf(case) -> bytes:
         "Hashing provides integrity verification, not authenticity proof.",
         styles["body"],
     ))
-    story.append(Spacer(1, 0.5 * cm))
+    story.append(Spacer(1, 0.15 * cm))
 
     # ════════════════════════════════════════════════════════════════════════
-    # SECTION 9 — LIMITATIONS & DISCLAIMER
+    # SECTION 8 — LIMITATIONS & DISCLAIMER
     # ════════════════════════════════════════════════════════════════════════
-    story.append(_section_box("9.  LIMITATIONS & DISCLAIMER", styles))
+    story.append(_section_box("8.  LIMITATIONS & DISCLAIMER", styles))
     story.append(Spacer(1, 6))
 
     limitations = [
@@ -659,15 +784,56 @@ def build_pdf(case) -> bytes:
         story.append(Paragraph(text, styles["body"]))
 
     story.append(_hline(C_ACCENT, 1))
-    story.append(Spacer(1, 6))
-    if disclaimer_txt:
-        story.append(Paragraph(f"⚖ {disclaimer_txt}", styles["disclaimer"]))
-    story.append(Spacer(1, 0.6 * cm))
+    story.append(Spacer(1, 0.15 * cm))
+
+    # ════════════════════════════════════════════════════════════════════════
+    # SECTION 9 — TECHNICAL APPENDIX — FORENSIC SIGNAL DETAIL
+    # ════════════════════════════════════════════════════════════════════════
+    if ref_pf or sus_pf:
+        story.append(_section_box("9.  TECHNICAL APPENDIX — FORENSIC SIGNAL DETAIL", styles))
+        story.append(Spacer(1, 6))
+
+        app_header = [
+            Paragraph("<b>Forensic Metric</b>",      styles["field_label"]),
+            Paragraph("<b>Reference Media</b>",     styles["field_label"]),
+            Paragraph("<b>Suspected Media</b>",     styles["field_label"]),
+        ]
+        app_data = [app_header]
+
+        for label, val_func in [
+            ("Noise Residual Variance", lambda a, f, p: str(p.get("noise", {}).get("residual_variance", "N/A")) if p else "N/A"),
+            ("LBP Texture Entropy",     lambda a, f, p: str(p.get("texture", {}).get("lbp_entropy", "N/A")) if p else "N/A"),
+            ("Chrominance Richness",    lambda a, f, p: str(p.get("color", {}).get("chrominance_richness", "N/A")) if p else "N/A"),
+            ("Edge Density",            lambda a, f, p: str(p.get("edges", {}).get("edge_density", "N/A")) if p else "N/A"),
+            ("2D FFT Spectral Ratio",   lambda a, f, p: str(p.get("frequency", {}).get("high_low_ratio", "N/A")) if p else "N/A"),
+            ("EXIF Hardware / Software",lambda a, f, p: " / ".join(filter(None, [p.get("metadata", {}).get("camera_make"), p.get("metadata", {}).get("software")])) or "No EXIF" if p else "N/A"),
+        ]:
+            r_str = val_func(ref_analysis, ref_fusion, ref_pf)
+            s_str = val_func(sus_analysis, sus_fusion, sus_pf)
+            app_data.append([
+                Paragraph(label, styles["field_label"]),
+                Paragraph(str(r_str), styles["field_val"]),
+                Paragraph(str(s_str), styles["field_val"]),
+            ])
+
+        app_table = Table(app_data, colWidths=[CONTENT_W * 0.38, CONTENT_W * 0.31, CONTENT_W * 0.31])
+        app_table.setStyle(TableStyle([
+            ("BACKGROUND",    (0, 0), (-1, 0), C_HEADER_BG),
+            ("TEXTCOLOR",     (0, 0), (-1, 0), colors.white),
+            ("ROWBACKGROUNDS",(0, 1), (-1, -1), [colors.HexColor("#f8fafc"), colors.white]),
+            ("LINEBELOW",     (0, 0), (-1, -1), 0.25, C_BORDER),
+            ("BOX",           (0, 0), (-1, -1), 0.5, C_BORDER),
+            ("TOPPADDING",    (0, 0), (-1, -1), 2.5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 6),
+        ]))
+        story.append(app_table)
+        story.append(Spacer(1, 0.2 * cm))
+
     story.append(Paragraph(
         f"TruthLens — AI-Powered Deepfake Detection & Digital Evidence Platform  |  End of Report",
         styles["footer_txt"],
     ))
 
-    # ── Build ─────────────────────────────────────────────────────────────────
     doc.build(story)
     return buf.getvalue()

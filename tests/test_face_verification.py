@@ -7,10 +7,11 @@ import torch.nn.functional as F
 from unittest.mock import patch
 from fastapi.testclient import TestClient
 
-# Add api directory to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "api")))
+# Add project root and api directory to path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "api")))
 
-from services.face_verification import (
+from api.services.face_verification import (
     FaceDetector,
     FaceEmbedder,
     FaceVerifier,
@@ -18,8 +19,8 @@ from services.face_verification import (
     get_face_verifier,
     DEFAULT_VERIFICATION_THRESHOLD,
 )
-import main
-from main import app
+from api import main
+from api.main import app
 
 client = TestClient(app)
 

@@ -18,22 +18,21 @@ import os
 import hashlib
 import tempfile
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "api"))
 
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
 
-
-# ── Import report service modules ─────────────────────────────────────────────
-from services.report.hasher import sha256_of_bytes
-from services.report.case_store import (
+from api.services.report.hasher import sha256_of_bytes
+from api.services.report.case_store import (
     sanitize_case_id,
     build_case,
     EvidenceCase,
     init_evidence_table,
 )
-from services.report.pdf_builder import build_pdf
+from api.services.report.pdf_builder import build_pdf
 
 
 # ── TEST 1: Case ID Format ────────────────────────────────────────────────────
@@ -252,7 +251,7 @@ def test_invalid_case_id_rejected_by_api():
     import os
     os.environ.setdefault("DEEPSAFE_CONFIG_FILE_PATH",
                           os.path.join(os.path.dirname(__file__), "..", "config", "deepsafe_config.json"))
-    from main import app
+    from api.main import app
     client = TestClient(app, raise_server_exceptions=False)
     resp = client.get("/reports/../../etc/passwd/download")
     assert resp.status_code in (400, 404)
@@ -263,7 +262,7 @@ def test_nonexistent_case_id_returns_404():
     import os
     os.environ.setdefault("DEEPSAFE_CONFIG_FILE_PATH",
                           os.path.join(os.path.dirname(__file__), "..", "config", "deepsafe_config.json"))
-    from main import app
+    from api.main import app
     client = TestClient(app, raise_server_exceptions=False)
     resp = client.get("/reports/TL-9999-999999/download")
     assert resp.status_code == 404
@@ -272,7 +271,7 @@ def test_nonexistent_case_id_returns_404():
 # ── TEST 10: Regression — Tasks 1–3 still work ───────────────────────────────
 def test_decision_engine_regression():
     """Decision Engine must still return POTENTIAL_DEEPFAKE for real+AI+same."""
-    from services.decision_engine import run_decision_engine, CAT_POTENTIAL_DEEPFAKE
+    from api.services.decision_engine import run_decision_engine, CAT_POTENTIAL_DEEPFAKE
 
     result = run_decision_engine(
         reference_analysis={"status": "completed", "prediction": "LIKELY_REAL", "ai_probability": 0.04},
@@ -284,7 +283,7 @@ def test_decision_engine_regression():
 
 def test_decision_engine_both_synthetic_regression():
     """AI+AI+Same must remain BOTH_MEDIA_APPEAR_SYNTHETIC."""
-    from services.decision_engine import run_decision_engine, CAT_BOTH_SYNTHETIC
+    from api.services.decision_engine import run_decision_engine, CAT_BOTH_SYNTHETIC
 
     result = run_decision_engine(
         reference_analysis={"status": "completed", "prediction": "LIKELY_AI_GENERATED", "ai_probability": 0.95},

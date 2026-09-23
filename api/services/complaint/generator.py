@@ -116,8 +116,12 @@ def generate_complaint_draft(
     sus_status = sus_analysis.get("status", "N/A").replace("_", " ").title()
     face_result = face_verif.get("result", "N/A").replace("_", " ").title()
     
-    sim_score = face_verif.get("similarity_score")
-    face_similarity_str = f"{sim_score * 100:.1f}%" if sim_score is not None else "N/A"
+    sim_score = (
+        face_verif.get("best_match_score")
+        if face_verif.get("best_match_score") is not None
+        else face_verif.get("similarity_score")
+    )
+    face_similarity_str = f"{sim_score * 100:.1f}%" if sim_score is not None else "Similarity unavailable"
     
     assessment_cat = assessment.get("category", "N/A").replace("_", " ").title()
     risk_lvl = assessment.get("risk_level", "N/A")

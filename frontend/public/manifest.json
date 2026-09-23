@@ -1,6 +1,6 @@
 {
-  "short_name": "DeepSafe",
-  "name": "DeepSafe - AI Deepfake Detection",
+  "short_name": "TruthLens",
+  "name": "TruthLens — AI Deepfake Detection & Digital Evidence Platform",
   "icons": [
     {
       "src": "assets/deepsafe.png",

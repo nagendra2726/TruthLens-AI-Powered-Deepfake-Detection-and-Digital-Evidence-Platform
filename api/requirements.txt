@@ -15,3 +15,8 @@ python-jose[cryptography]
 passlib[bcrypt]
 sqlalchemy==2.0.21
 reportlab>=4.0.0
+# AI model dependencies
+torch
+transformers
+numpy
+scipy

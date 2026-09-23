@@ -44,11 +44,9 @@ clean:
 	rm -rf .pytest_cache
 
 test:
-	@echo "Running system tests..."
-	docker compose up -d api
-	docker cp test_system.py deepsafe-api:/app/
-	docker cp test_samples deepsafe-api:/app/
-	docker exec deepsafe-api python test_system.py
+	@echo "Running pipeline tests..."
+	pytest tests/test_pipeline.py -v --tb=short
+
 
 lint:
 	@echo "Running linters..."

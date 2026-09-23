@@ -9,15 +9,16 @@ import zipfile
 import sys
 import os
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "api"))
 
 import pytest
 from fastapi.testclient import TestClient
 
-from main import app
-from services.report.case_store import build_case, save_case, get_case, init_evidence_table
-from database import get_db, SessionLocal
-from services.complaint.schemas import ComplaintEligibilityStatus
+from api.main import app
+from api.services.report.case_store import build_case, save_case, get_case, init_evidence_table
+from api.database import get_db, SessionLocal
+from api.services.complaint.schemas import ComplaintEligibilityStatus
 
 
 @pytest.fixture(scope="module", autouse=True)
