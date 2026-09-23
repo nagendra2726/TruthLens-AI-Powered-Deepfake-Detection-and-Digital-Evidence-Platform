@@ -27,8 +27,9 @@ services:
   # ─────────────────────────────────────────────────────────────
   # TruthLens Frontend Application (React)
   # ─────────────────────────────────────────────────────────────
-  - type: static
+  - type: web
     name: truthlens-frontend
+    runtime: static
     region: oregon
     rootDir: frontend
     buildCommand: npm install && npm run build
