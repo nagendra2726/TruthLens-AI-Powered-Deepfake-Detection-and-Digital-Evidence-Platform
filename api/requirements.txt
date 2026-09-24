@@ -16,9 +16,9 @@ passlib[bcrypt]
 sqlalchemy==2.0.21
 reportlab>=4.0.0
 # AI model & face verification dependencies
-torch
-torchvision
-transformers
+torch==2.2.2
+torchvision==0.17.2
+transformers>=4.40.0,<5.0.0
 facenet-pytorch>=2.6.0
 numpy
 scipy
