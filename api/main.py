@@ -19,6 +19,8 @@ Driven by `deepsafe_config.json`, allowing for dynamic registration of new model
 import sys
 import os
 
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+
 _API_DIR = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT = os.path.dirname(_API_DIR)
 _SDK_DIR = os.path.join(_PROJECT_ROOT, "sdk")
