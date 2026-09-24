@@ -52,3 +52,61 @@ class FaceDetector:
         except Exception as e:
             logger.warning(f"Error during face detection: {e}")
             return None, 0
+
+    def analyze_faces(self, image: Image.Image) -> dict:
+        """
+        Detects faces in a PIL Image and returns structured face metadata:
+        - face_detected: bool
+        - face_count: int
+        - bounding_boxes: list of [x1, y1, x2, y2]
+        - detection_confidences: list of float confidences
+        - message: explanatory string regarding human-face context
+        """
+        if image.mode != "RGB":
+            image = image.convert("RGB")
+
+        try:
+            boxes, probs = self.mtcnn.detect(image)
+            if boxes is None or len(boxes) == 0:
+                return {
+                    "face_detected": False,
+                    "face_count": 0,
+                    "bounding_boxes": [],
+                    "detection_confidences": [],
+                    "message": "No human face was detected in this image. TruthLens is calibrated specifically for human facial deepfake and synthetic media analysis; assessments on non-facial media should not be treated as human deepfake evidence.",
+                }
+
+            valid_boxes = []
+            valid_probs = []
+            for i, box in enumerate(boxes):
+                if box is not None:
+                    prob = float(probs[i]) if probs is not None and probs[i] is not None else 0.0
+                    valid_boxes.append([round(float(c), 1) for c in box])
+                    valid_probs.append(round(prob, 4))
+
+            count = len(valid_boxes)
+            if count == 0:
+                return {
+                    "face_detected": False,
+                    "face_count": 0,
+                    "bounding_boxes": [],
+                    "detection_confidences": [],
+                    "message": "No human face was detected in this image. TruthLens is calibrated specifically for human facial deepfake and synthetic media analysis; assessments on non-facial media should not be treated as human deepfake evidence.",
+                }
+
+            return {
+                "face_detected": True,
+                "face_count": count,
+                "bounding_boxes": valid_boxes,
+                "detection_confidences": valid_probs,
+                "message": f"{count} human face(s) detected and analyzed.",
+            }
+        except Exception as e:
+            logger.warning(f"Error during face analysis: {e}")
+            return {
+                "face_detected": False,
+                "face_count": 0,
+                "bounding_boxes": [],
+                "detection_confidences": [],
+                "message": f"Face detection encountered an issue: {str(e)}",
+            }

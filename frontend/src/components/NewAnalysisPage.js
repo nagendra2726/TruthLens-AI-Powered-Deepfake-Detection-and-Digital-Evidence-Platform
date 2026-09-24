@@ -257,6 +257,7 @@ const NewAnalysisPage = ({ onAnalysisComplete }) => {
         image_analysis: data.image_analysis || null,
         sha256: data.hash?.sha256 || null,
         hash: data.hash || null,
+        face_analysis: data.face_analysis || null,
         face_verification: data.face_verification || null,
       };
 

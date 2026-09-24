@@ -186,6 +186,7 @@ export default function ResultPage() {
   const sus = resultData.suspected_analysis || {};
   const ref = resultData.reference_analysis || {};
   const face = resultData.face_verification || null;
+  const faceAnalysis = resultData.face_analysis || resultData.faceAnalysis || (face?.face_detected != null ? face : null);
   const imageAnalysis = resultData.image_analysis || {};
   const fileInfo = imageAnalysis.file_information || {};
   const optical = imageAnalysis.optical_characteristics || {};
@@ -345,26 +346,67 @@ export default function ResultPage() {
     explanationPoints.push('Cryptographic SHA-256 fingerprint verified for tamper-evident chain of custody.');
   }
 
-  // Technical Details Grid Items
-  const techDetails = [
-    { label: 'Filename', value: fileInfo.filename || resultData.filename || resultData.suspected_filename || null },
-    { label: 'Image Dimensions', value: fileInfo.width && fileInfo.height ? `${fileInfo.width} × ${fileInfo.height} px` : null },
-    { label: 'Resolution', value: fileInfo.width && fileInfo.height ? `${((fileInfo.width * fileInfo.height) / 1000000).toFixed(2)} MP` : null },
-    { label: 'Aspect Ratio', value: fileInfo.aspect_ratio || null },
-    { label: 'File Type', value: fileInfo.format || fileInfo.content_type || 'Image' },
-    { label: 'File Size', value: fileInfo.file_size_bytes ? `${(fileInfo.file_size_bytes / 1024).toFixed(1)} KB` : null },
-    { label: 'Brightness', value: optical.brightness != null ? optical.brightness.toFixed(3) : null },
-    { label: 'Contrast', value: optical.contrast != null ? optical.contrast.toFixed(3) : null },
-    { label: 'Sharpness', value: optical.sharpness != null ? optical.sharpness.toFixed(2) : null },
-    { label: 'Noise Variance', value: optical.noise_variance != null ? optical.noise_variance.toFixed(2) : (pixel.noise?.residual_variance != null ? Number(pixel.noise.residual_variance).toFixed(2) : null) },
-    { label: 'Edge Density', value: optical.edge_density != null ? optical.edge_density.toFixed(3) : (pixel.edges?.edge_density != null ? Number(pixel.edges.edge_density).toFixed(3) : null) },
-    // ELA compression_resilience is a descriptive string label — display as text, not a percentage
-    { label: 'ELA Compression Profile', value: typeof ela.compression_resilience === 'string' ? ela.compression_resilience : (ela.score != null ? `Score: ${ela.score.toFixed(3)}` : null) },
-    { label: 'ELA Mean Error', value: ela.mean_error != null ? ela.mean_error.toFixed(3) : null },
-    { label: 'Spectral Consistency', value: spectral.spectral_consistency || null },
-    { label: 'High Frequency Ratio', value: spectral.high_frequency_ratio != null ? spectral.high_frequency_ratio.toFixed(4) : (pixel.frequency?.high_low_ratio != null ? Number(pixel.frequency.high_low_ratio).toFixed(4) : null) },
-    { label: 'Processing Time', value: resultData.processing_time_seconds ? `${resultData.processing_time_seconds}s` : null },
-  ].filter(item => item.value != null);
+  // Technical Details Categorized Groups (Requirement 3.E)
+  const techDetailGroups = [
+    {
+      group: 'FILE INFORMATION',
+      items: [
+        { label: 'File Name', value: fileInfo.filename || resultData.filename || resultData.suspected_filename || null },
+        { label: 'File Format', value: fileInfo.format || null },
+        { label: 'MIME Type', value: fileInfo.content_type || resultData.suspected_content_type || 'image/jpeg' },
+        { label: 'File Size', value: fileInfo.file_size_bytes ? `${(fileInfo.file_size_bytes / 1024).toFixed(1)} KB` : null },
+        { label: 'Image Width', value: fileInfo.width ? `${fileInfo.width} px` : null },
+        { label: 'Image Height', value: fileInfo.height ? `${fileInfo.height} px` : null },
+        { label: 'Color Mode', value: fileInfo.color_mode || 'RGB' },
+        { label: 'SHA-256 Digest', value: fileHash || null },
+      ].filter(i => i.value != null),
+    },
+    {
+      group: 'IMAGE CHARACTERISTICS',
+      items: [
+        { label: 'Brightness', value: optical.brightness != null ? optical.brightness.toFixed(3) : null },
+        { label: 'Contrast', value: optical.contrast != null ? optical.contrast.toFixed(3) : null },
+        { label: 'Exposure', value: optical.exposure != null ? optical.exposure.toFixed(3) : (optical.brightness != null ? `${(optical.brightness * 100).toFixed(1)}%` : null) },
+        { label: 'Sharpness', value: optical.sharpness != null ? optical.sharpness.toFixed(2) : null },
+        { label: 'Texture', value: optical.texture != null ? optical.texture.toFixed(3) : null },
+        { label: 'Saturation', value: optical.saturation != null ? optical.saturation.toFixed(3) : null },
+        { label: 'Noise Variance', value: optical.noise_variance != null ? optical.noise_variance.toFixed(2) : (pixel.noise?.residual_variance != null ? Number(pixel.noise.residual_variance).toFixed(2) : null) },
+      ].filter(i => i.value != null),
+    },
+    {
+      group: 'FORENSIC INDICATORS',
+      items: [
+        { label: 'Edge Density', value: optical.edge_density != null ? optical.edge_density.toFixed(3) : (pixel.edges?.edge_density != null ? Number(pixel.edges.edge_density).toFixed(3) : null) },
+        { label: 'High-Frequency Ratio', value: spectral.high_frequency_ratio != null ? spectral.high_frequency_ratio.toFixed(4) : (pixel.frequency?.high_low_ratio != null ? Number(pixel.frequency.high_low_ratio).toFixed(4) : null) },
+        { label: 'Noise Residual', value: pixel.noise?.residual_variance != null ? Number(pixel.noise.residual_variance).toFixed(3) : (optical.noise_variance != null ? optical.noise_variance.toFixed(3) : null) },
+        { label: 'ELA Compression Profile', value: typeof ela.compression_resilience === 'string' ? ela.compression_resilience : (ela.score != null ? `Score: ${ela.score.toFixed(3)}` : null) },
+        { label: 'ELA Mean Error', value: ela.mean_error != null ? ela.mean_error.toFixed(3) : null },
+        { label: 'Spectral Consistency', value: spectral.spectral_consistency || null },
+      ].filter(i => i.value != null),
+    },
+    {
+      group: 'FACE ANALYSIS',
+      items: [
+        { label: 'Number of Detected Faces', value: faceAnalysis?.face_count != null ? String(faceAnalysis.face_count) : (faceAnalysis?.face_detected ? '1' : '0') },
+        { label: 'Human Face Detected', value: faceAnalysis?.face_detected ? 'Yes' : 'No' },
+        { label: 'Face Regions / Bounding Boxes', value: faceAnalysis?.bounding_boxes && faceAnalysis.bounding_boxes.length > 0 ? `${faceAnalysis.bounding_boxes.length} box(es) localized` : 'None' },
+        { label: 'Detection Confidence', value: faceAnalysis?.detection_confidences && faceAnalysis.detection_confidences.length > 0 ? faceAnalysis.detection_confidences.map(c => `${(c * 100).toFixed(1)}%`).join(', ') : null },
+        { label: 'Biometric Status', value: faceAnalysis?.face_detected ? 'Human facial region localized for AI analysis' : 'No human face detected (calibrated for human faces)' },
+      ].filter(i => i.value != null),
+    },
+    {
+      group: 'AI MODEL',
+      items: [
+        { label: 'Model Name', value: resObj.model_name || sus.model_name || 'dima806/deepfake_vs_real_image_detection' },
+        { label: 'Architecture', value: resObj.architecture || sus.architecture || 'Vision Transformer (ViT)' },
+        { label: 'Predicted Class', value: verdictTitle },
+        { label: 'Authentic Probability', value: `${realPct.toFixed(1)}%` },
+        { label: 'AI-Generated Probability', value: `${aiPct.toFixed(1)}%` },
+        { label: 'Model Confidence', value: formattedConfidence },
+        { label: 'Model Status', value: resObj.is_model_live !== false ? 'Live (Preloaded in memory)' : 'Forensic Heuristic Fallback' },
+      ].filter(i => i.value != null),
+    },
+  ];
 
   return (
     <div className="fade-in" style={{ maxWidth: 1040, margin: '0 auto', paddingBottom: '3rem' }}>
@@ -634,27 +676,63 @@ export default function ResultPage() {
               </div>
             )}
 
-            {/* Clean Two-Column Grid */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-              gap: '0.75rem 2rem'
-            }}>
-              {techDetails.map(({ label, value }) => (
-                <div
-                  key={label}
-                  style={{
+            {/* Categorized Technical Details Groups */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              {techDetailGroups.map(grp => grp.items.length > 0 && (
+                <div key={grp.group}>
+                  <div style={{
+                    fontSize: '0.75rem',
+                    fontWeight: 800,
+                    letterSpacing: '0.06em',
+                    color: '#2563EB',
+                    marginBottom: '0.65rem',
+                    textTransform: 'uppercase',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '0.45rem 0',
-                    borderBottom: '1px solid #F1F5F9'
-                  }}
-                >
-                  <span style={{ fontSize: '0.8125rem', color: '#64748B' }}>{label}</span>
-                  <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A', fontFamily: 'var(--font-mono)' }}>
-                    {value}
-                  </span>
+                    gap: '0.5rem',
+                  }}>
+                    <span>{grp.group}</span>
+                    <div style={{ flex: 1, height: '1px', background: '#E2E8F0' }} />
+                  </div>
+
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                    gap: '0.45rem 2rem',
+                  }}>
+                    {grp.items.map(({ label, value }) => (
+                      <div
+                        key={label}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '0.4rem 0',
+                          borderBottom: '1px solid #F1F5F9',
+                        }}
+                      >
+                        <span style={{ fontSize: '0.8125rem', color: '#64748B' }}>{label}</span>
+                        <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A', fontFamily: 'var(--font-mono)' }}>
+                          {value}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {grp.group === 'FACE ANALYSIS' && faceAnalysis && !faceAnalysis.face_detected && (
+                    <div style={{
+                      marginTop: '0.65rem',
+                      padding: '0.65rem 0.85rem',
+                      background: '#FFFBEB',
+                      border: '1px solid #FDE68A',
+                      borderRadius: 8,
+                      fontSize: '0.8rem',
+                      color: '#92400E',
+                      lineHeight: 1.45,
+                    }}>
+                      <strong>Notice:</strong> TruthLens is calibrated specifically for human facial deepfake and synthetic media analysis. Non-facial assessments should not be treated as human deepfake evidence.
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -907,9 +985,9 @@ export default function ResultPage() {
       {/* ============================================================
           10. DISCLAIMER & HELP LINK
           ============================================================ */}
-      <div style={{ textAlign: 'center', padding: '1rem 0', borderTop: '1px solid #E2E8F0' }}>
-        <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: 0, lineHeight: 1.6 }}>
-          AI-assisted assessment. This result is not definitive proof of authenticity or manipulation.
+      <div style={{ textAlign: 'center', padding: '1.25rem 0 0.5rem', borderTop: '1px solid #E2E8F0' }}>
+        <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: '0 auto', maxWidth: 780, lineHeight: 1.6 }}>
+          AI-based image detection provides a probabilistic assessment and should not be treated as conclusive proof of authenticity or manipulation. Supporting forensic indicators provide additional context but may be affected by image compression, resizing, editing, and other processing.
         </p>
         <p style={{ fontSize: '0.75rem', color: '#94A3B8', marginTop: '0.35rem' }}>
           Need to report an incident or consult Indian legal remedies?{' '}

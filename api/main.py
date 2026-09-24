@@ -73,6 +73,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from database import init_db, get_db, SessionLocal, AnalysisHistory, ApiKey
 from services.face_verification import (
+    get_face_detector,
     get_face_verifier,
     FaceVerificationResult,
     DEFAULT_VERIFICATION_THRESHOLD,
@@ -3337,6 +3338,11 @@ async def truthlens_api_analyze_endpoint(
 
     sha256_hash = calculate_sha256(file_bytes)
 
+    # 3. Human Face Localization & Verification Scope (Requirement 6 & 8)
+    face_detector = get_face_detector()
+    face_analysis = face_detector.analyze_faces(pil_img)
+
+    # 4. Vision Transformer AI Detection
     _t_start = time.time()
     detector = get_ai_detector()
     ai_result = detector.predict_image(pil_img)
@@ -3356,6 +3362,22 @@ async def truthlens_api_analyze_endpoint(
     thumb_buf = io.BytesIO()
     thumb_img.save(thumb_buf, format="JPEG", quality=75)
     prev_b64 = base64.b64encode(thumb_buf.getvalue()).decode("utf-8")
+
+    # Assessment narrative with human-face scope context
+    if not face_analysis["face_detected"]:
+        explanation_text = (
+            f"AI detection signals indicate a {'high' if ai_result['ai_probability'] >= 0.55 else 'low' if ai_result['ai_probability'] <= 0.45 else 'moderate'} "
+            f"likelihood that this media was AI-generated or synthetically altered. "
+            "Notice: No human face was detected in this image. TruthLens is calibrated specifically for human facial deepfake and synthetic media analysis; "
+            "assessments on non-facial media should not be treated as human deepfake evidence."
+        )
+    else:
+        face_cnt = face_analysis.get("face_count", 1)
+        explanation_text = (
+            f"AI detection signals indicate a {'high' if ai_result['ai_probability'] >= 0.55 else 'low' if ai_result['ai_probability'] <= 0.45 else 'moderate'} "
+            f"likelihood that this media was AI-generated or synthetically altered. "
+            f"{face_cnt} human face(s) localized and evaluated."
+        )
 
     ev_case = build_case(
         case_id=case_id,
@@ -3387,12 +3409,19 @@ async def truthlens_api_analyze_endpoint(
             "model_name": ai_result["model_name"],
             "architecture": ai_result["architecture"],
         },
-        face_verification=None,
+        face_verification={
+            "face_detected": face_analysis["face_detected"],
+            "face_count": face_analysis["face_count"],
+            "bounding_boxes": face_analysis["bounding_boxes"],
+            "detection_confidences": face_analysis["detection_confidences"],
+            "message": face_analysis["message"],
+            "is_comparison": False,
+        },
         assessment={
             "category": ai_result["category"],
             "risk_level": ai_result["risk_level"],
             "confidence": ai_result["confidence"],
-            "explanation": f"AI detection signals indicate a {'high' if ai_result['ai_probability'] >= 0.55 else 'low' if ai_result['ai_probability'] <= 0.45 else 'moderate'} likelihood that this media was AI-generated or synthetically altered.",
+            "explanation": explanation_text,
             "disclaimer": "AI-assisted screening. Results may contain errors and should not be treated as definitive proof.",
         },
         model_info={
@@ -3425,6 +3454,7 @@ async def truthlens_api_analyze_endpoint(
             "sha256": sha256_hash,
             "explanation": "SHA-256 is a digital fingerprint used to identify the exact file and verify whether the file has changed. It is not an AI detection method.",
         },
+        "face_analysis": face_analysis,
         "face_verification": None,
         "processing_time_seconds": _processing_seconds,
         "report": {

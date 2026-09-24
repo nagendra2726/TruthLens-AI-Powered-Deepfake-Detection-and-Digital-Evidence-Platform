@@ -7,7 +7,17 @@ from .verifier import FaceVerifier, DEFAULT_VERIFICATION_THRESHOLD
 
 logger = logging.getLogger(__name__)
 
+_face_detector_instance: Optional[FaceDetector] = None
 _face_verifier_instance: Optional[FaceVerifier] = None
+
+
+def get_face_detector() -> FaceDetector:
+    """Singleton getter for the shared FaceDetector (MTCNN) instance."""
+    global _face_detector_instance
+    if _face_detector_instance is None:
+        logger.info("Instantiating global FaceDetector singleton...")
+        _face_detector_instance = FaceDetector()
+    return _face_detector_instance
 
 
 def get_face_verifier() -> FaceVerifier:
@@ -24,6 +34,7 @@ __all__ = [
     "FaceEmbedder",
     "FaceVerifier",
     "FaceVerificationResult",
+    "get_face_detector",
     "get_face_verifier",
     "DEFAULT_VERIFICATION_THRESHOLD",
 ]

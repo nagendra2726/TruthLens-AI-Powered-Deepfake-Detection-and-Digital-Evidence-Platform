@@ -83,3 +83,35 @@ def test_truthlens_analyze_missing_file():
     """Verify POST /api/analyze handles missing file with HTTP 400."""
     resp = client.post("/api/analyze")
     assert resp.status_code == 400
+
+
+def test_truthlens_analyze_endpoint_human_face():
+    """Verify POST /api/analyze correctly detects human faces and bounding boxes."""
+    with open("tests/fixtures/real_person.jpg", "rb") as f:
+        img_bytes = f.read()
+
+    resp = client.post(
+        "/api/analyze",
+        files={"image": ("real_person.jpg", io.BytesIO(img_bytes), "image/jpeg")},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data["success"] is True
+    assert "face_analysis" in data
+    fa = data["face_analysis"]
+    assert fa["face_detected"] is True
+    assert fa["face_count"] >= 1
+    assert len(fa["bounding_boxes"]) >= 1
+    assert len(fa["detection_confidences"]) >= 1
+    assert "human face" in fa["message"].lower()
+
+    # Cleanup created case
+    case_id = data["case_id"]
+    db = SessionLocal()
+    try:
+        db.query(EvidenceCase).filter(EvidenceCase.case_id == case_id).delete()
+        db.commit()
+    finally:
+        db.close()
+

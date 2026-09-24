@@ -14,6 +14,7 @@ import ResultPage      from './components/ResultPage';
 import HistoryPage     from './components/HistoryPage';
 import ProfilePage     from './components/ProfilePage';
 import HelpReportingPage from './components/HelpReportingPage';
+import LandingPage       from './components/LandingPage';
 
 import './App.css';
 
@@ -104,8 +105,8 @@ function AppRoutes() {
   return (
     <>
       <Routes>
-        {/* Root redirect */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        {/* Public landing / home page */}
+        <Route path="/" element={<LandingPage />} />
 
         {/* Public auth pages */}
         <Route path="/login"  element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />

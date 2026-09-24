@@ -682,35 +682,62 @@ def build_pdf(case) -> bytes:
         story.append(Spacer(1, 0.15 * cm))
 
     # ════════════════════════════════════════════════════════════════════════
-    # SECTION 5 — FACE IDENTITY VERIFICATION
+    # SECTION 5 — FACE ANALYSIS & IDENTITY VERIFICATION
     # ════════════════════════════════════════════════════════════════════════
-    story.append(_section_box("5.  FACE IDENTITY VERIFICATION", styles))
+    story.append(_section_box("5.  FACE ANALYSIS & IDENTITY VERIFICATION", styles))
     story.append(Spacer(1, 6))
 
-    face_result = face_verif.get("result", "N/A")
-    face_score  = face_verif.get("best_match_score")
-    ref_faces_cnt = face_verif.get("reference_faces_count", 1) or 1
-    sus_faces_cnt = face_verif.get("suspected_faces_count", 1) or 1
+    is_comparison = bool(face_verif.get("result") or face_verif.get("reference_face_detected") is not None)
 
-    face_rows = [
-        ("Reference Face Detected",   "Yes" if face_verif.get("reference_face_detected") else "No"),
-        ("Reference Faces Count",     str(ref_faces_cnt)),
-        ("Suspected Face Detected",   "Yes" if face_verif.get("suspected_face_detected") else "No"),
-        ("Suspected Faces Count",     str(sus_faces_cnt)),
-    ]
-    if ref_faces_cnt > 1 or sus_faces_cnt > 1:
-        face_rows.append(("Best Match Face Index", str(face_verif.get("best_match_face_index", "N/A"))))
+    if is_comparison:
+        face_result = face_verif.get("result", "N/A")
+        face_score  = face_verif.get("best_match_score")
+        ref_faces_cnt = face_verif.get("reference_faces_count", 1) or 1
+        sus_faces_cnt = face_verif.get("suspected_faces_count", 1) or 1
 
-    face_rows.extend([
-        ("Cosine Similarity Score",   _fmt_pct(face_score)),
-        ("Threshold Used",            _fmt_pct(face_verif.get("threshold_used"))),
-        ("Verification Result",       _fmt_face(face_result)),
-    ])
+        face_rows = [
+            ("Reference Face Detected",   "Yes" if face_verif.get("reference_face_detected") else "No"),
+            ("Reference Faces Count",     str(ref_faces_cnt)),
+            ("Suspected Face Detected",   "Yes" if face_verif.get("suspected_face_detected") else "No"),
+            ("Suspected Faces Count",     str(sus_faces_cnt)),
+        ]
+        if ref_faces_cnt > 1 or sus_faces_cnt > 1:
+            face_rows.append(("Best Match Face Index", str(face_verif.get("best_match_face_index", "N/A"))))
 
-    story.append(_kv_table(face_rows, styles))
-    if face_verif.get("message"):
+        face_rows.extend([
+            ("Cosine Similarity Score",   _fmt_pct(face_score)),
+            ("Threshold Used",            _fmt_pct(face_verif.get("threshold_used"))),
+            ("Verification Result",       _fmt_face(face_result)),
+        ])
+
+        story.append(_kv_table(face_rows, styles))
+        if face_verif.get("message"):
+            story.append(Spacer(1, 4))
+            story.append(Paragraph(f"Note: {face_verif['message']}", styles["disclaimer"]))
+    else:
+        face_detected = bool(face_verif.get("face_detected", False))
+        face_count = face_verif.get("face_count", 0)
+        face_msg = face_verif.get("message") or (
+            f"{face_count} human face(s) detected and analyzed." if face_detected else
+            "No human face was detected in this image. TruthLens is calibrated specifically for human facial deepfake and synthetic media analysis."
+        )
+
+        face_rows = [
+            ("Human Face Detected",       "Yes" if face_detected else "No"),
+            ("Detected Faces Count",      str(face_count)),
+            ("Face Detection Engine",     "MTCNN (facenet-pytorch)"),
+            ("Analysis Scope",            "Human facial biometric & deepfake screening"),
+            ("Face Verification Status",  "Single Media Analysis (Identity comparison optional)"),
+        ]
+        story.append(_kv_table(face_rows, styles))
         story.append(Spacer(1, 4))
-        story.append(Paragraph(f"Note: {face_verif['message']}", styles["disclaimer"]))
+        story.append(Paragraph(f"Note: {face_msg}", styles["disclaimer"]))
+        story.append(Spacer(1, 2))
+        story.append(Paragraph(
+            "Notice: Face verification measures similarity between facial images and is separate from deepfake detection. A detected face does not prove authenticity.",
+            styles["disclaimer"],
+        ))
+
     story.append(Spacer(1, 0.15 * cm))
 
     # ════════════════════════════════════════════════════════════════════════

@@ -64,6 +64,12 @@ def build_case_metadata_json(case) -> Dict[str, Any]:
             "referenceFacesCount": face_verif.get("reference_faces_count", 0),
             "suspectedFacesCount": face_verif.get("suspected_faces_count", 0),
         },
+        "faceAnalysis": {
+            "faceDetected": bool(face_verif.get("face_detected", False)) if face_verif else False,
+            "faceCount": face_verif.get("face_count", face_verif.get("suspected_faces_count", 0)) if face_verif else 0,
+            "message": face_verif.get("message", "") if face_verif else "",
+            "boundingBoxes": face_verif.get("bounding_boxes", []) if face_verif else [],
+        },
         "modelInfo": model_info,
         "report": {
             "generated": True,
