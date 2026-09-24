@@ -17,6 +17,8 @@ import os
 import io
 import time
 import hashlib
+import gc
+import threading
 import logging
 from typing import Dict, Any, Optional, Tuple
 from PIL import Image, ImageChops, ImageEnhance, ImageStat, ImageFilter
@@ -39,7 +41,7 @@ DEFAULT_REAL_THRESHOLD = 0.45     # AI probability <= 0.45 -> Likely Real
 class TruthLensAIDetector:
     """
     Singleton AI Detection & Image Forensics Engine.
-    Loaded once at server startup and reused across requests.
+    Lazily loaded on first image analysis request with thread-safe locking and memory optimizations.
     """
 
     _instance: Optional["TruthLensAIDetector"] = None
@@ -50,19 +52,56 @@ class TruthLensAIDetector:
         self.model = None
         self.processor = None
         self.is_loaded = False
+        self.dtype = torch.float32
         self.id2label = {0: "Real", 1: "Fake"}
         self.real_idx = 0
         self.fake_idx = 1
-        self._load_model()
+        self._lock = threading.Lock()
+
+    def load_model_if_needed(self):
+        """Thread-safe lazy initialization: loads model once when first requested."""
+        if self.is_loaded and self.model is not None and self.processor is not None:
+            return
+        with self._lock:
+            if not self.is_loaded or self.model is None or self.processor is None:
+                self._load_model()
 
     def _load_model(self):
-        """Loads and caches the ViT model in memory with inference optimizations."""
+        """Loads and caches the ViT model in memory with memory and inference optimizations."""
         try:
             from transformers import AutoImageProcessor, AutoModelForImageClassification
             logger.info(f"Loading TruthLens AI model '{self.model_name}' on {self.device}...")
             start = time.time()
+
+            # Limit CPU threads to 1 to avoid multi-thread memory buffer spikes on low-memory instances
+            if self.device.type == "cpu":
+                torch.set_num_threads(1)
+                torch.set_num_interop_threads(1)
+
             self.processor = AutoImageProcessor.from_pretrained(self.model_name)
-            self.model = AutoModelForImageClassification.from_pretrained(self.model_name).to(self.device)
+
+            # Try bfloat16 + low_cpu_mem_usage=True for ~50% reduction in memory footprint
+            try:
+                model = AutoModelForImageClassification.from_pretrained(
+                    self.model_name,
+                    torch_dtype=torch.bfloat16,
+                    low_cpu_mem_usage=True,
+                ).to(self.device)
+                dummy = torch.zeros((1, 3, 224, 224), dtype=torch.bfloat16, device=self.device)
+                with torch.inference_mode():
+                    _ = model(dummy)
+                self.dtype = torch.bfloat16
+                logger.info(f"TruthLens AI model initialized with bfloat16 and low_cpu_mem_usage=True on {self.device}")
+            except Exception as bf16_err:
+                logger.info(f"bfloat16 not optimal on this CPU ({bf16_err}), falling back to float32")
+                model = AutoModelForImageClassification.from_pretrained(
+                    self.model_name,
+                    torch_dtype=torch.float32,
+                    low_cpu_mem_usage=True,
+                ).to(self.device)
+                self.dtype = torch.float32
+
+            self.model = model
             self.model.eval()
 
             # Dynamic label mapping from config
@@ -78,6 +117,7 @@ class TruthLensAIDetector:
             self.is_loaded = True
             load_time = round(time.time() - start, 2)
             logger.info(f"TruthLens AI model loaded in {load_time}s. Labels: {self.id2label}")
+            gc.collect()
         except Exception as e:
             logger.warning(f"Failed to load HF model '{self.model_name}': {e}. Using forensic heuristic fallback.")
             self.model = None
@@ -86,17 +126,20 @@ class TruthLensAIDetector:
 
     def predict_image(self, img: Image.Image) -> Dict[str, Any]:
         """
-        Run inference using the cached Vision Transformer model.
+        Run inference using the Vision Transformer model.
         Returns genuine probabilities and academic classifications.
         """
+        self.load_model_if_needed()
         rgb_img = img.convert("RGB")
 
         if self.is_loaded and self.model is not None and self.processor is not None:
             try:
                 inputs = self.processor(images=rgb_img, return_tensors="pt").to(self.device)
-                with torch.no_grad():
+                if self.dtype == torch.bfloat16:
+                    inputs = {k: v.to(torch.bfloat16) if v.is_floating_point() else v for k, v in inputs.items()}
+                with torch.inference_mode():
                     logits = self.model(**inputs).logits
-                    probs = torch.softmax(logits, dim=-1)[0]
+                    probs = torch.softmax(logits.float(), dim=-1)[0]
                     fake_prob = float(probs[self.fake_idx].item())
                     real_prob = float(probs[self.real_idx].item())
             except Exception as e:

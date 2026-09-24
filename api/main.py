@@ -349,16 +349,16 @@ async def startup_event_api():
     init_evidence_table()
     logger.info("Evidence case table initialized successfully")
 
-    # Pre-warm TruthLens Vision Transformer AI Model ONCE at startup (Phase 4 requirement)
+    # Register TruthLens Vision Transformer AI Model (lazy-loaded on first inference request)
     try:
         try:
             from api.services.ai_detector import get_ai_detector
         except ImportError:
             from services.ai_detector import get_ai_detector
         detector = get_ai_detector()
-        logger.info(f"TruthLens AI model preloaded (live={detector.is_loaded})")
+        logger.info(f"TruthLens AI model registered (lazy loading on first inference, live={detector.is_loaded})")
     except Exception as e:
-        logger.warning(f"TruthLens AI model pre-warm notice: {e}")
+        logger.warning(f"TruthLens AI model initialization notice: {e}")
 
     if not SUPPORTED_MEDIA_TYPES:
         logger.error(
