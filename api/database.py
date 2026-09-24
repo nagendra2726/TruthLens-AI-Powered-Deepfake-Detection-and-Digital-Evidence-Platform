@@ -106,6 +106,15 @@ class ApiKey(Base):
 
 def init_db():
     """Initialize database tables with SQLite backward-compatible column migration."""
+    # Deduplicate any table indexes that may have been registered multiple times
+    for table in Base.metadata.tables.values():
+        seen_names = set()
+        for idx in list(table.indexes):
+            if idx.name in seen_names:
+                table.indexes.remove(idx)
+            else:
+                seen_names.add(idx.name)
+
     Base.metadata.create_all(bind=engine)
     
     # SQLite graceful column additions if upgrading existing DB

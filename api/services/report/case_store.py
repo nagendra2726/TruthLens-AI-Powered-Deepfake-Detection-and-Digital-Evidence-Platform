@@ -111,9 +111,38 @@ class EvidenceCase(Base):
         }
 
 
+# Deduplicate indexes on EvidenceCase.__table__ to prevent duplicate index definitions
+# if the model is loaded multiple times under different namespace paths (e.g. api.services vs services)
+_seen_evidence_indexes = set()
+for _idx in list(EvidenceCase.__table__.indexes):
+    if _idx.name in _seen_evidence_indexes:
+        EvidenceCase.__table__.indexes.remove(_idx)
+    else:
+        _seen_evidence_indexes.add(_idx.name)
+
+# Alias sys.modules entries to prevent multiple instances of this module
+if __name__ == "services.report.case_store" and "api.services.report.case_store" not in sys.modules:
+    sys.modules["api.services.report.case_store"] = sys.modules[__name__]
+elif __name__ == "api.services.report.case_store" and "services.report.case_store" not in sys.modules:
+    sys.modules["services.report.case_store"] = sys.modules[__name__]
+
+
 def init_evidence_table() -> None:
-    """Create the evidence_cases table if it does not already exist."""
-    EvidenceCase.__table__.create(bind=engine, checkfirst=True)
+    """Create the evidence_cases table if it does not already exist (idempotent)."""
+    # Ensure indexes on __table__ are deduplicated before attempting creation
+    seen = set()
+    for idx in list(EvidenceCase.__table__.indexes):
+        if idx.name in seen:
+            EvidenceCase.__table__.indexes.remove(idx)
+        else:
+            seen.add(idx.name)
+    try:
+        EvidenceCase.__table__.create(bind=engine, checkfirst=True)
+    except Exception as e:
+        if "already exists" in str(e).lower():
+            pass
+        else:
+            raise
 
 
 # ---------------------------------------------------------------------------

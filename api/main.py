@@ -2606,11 +2606,11 @@ async def download_forensic_report(case_id: str, db: Session = Depends(get_db)):
 # Task 4B — Case File Package Generation & Download Endpoints
 # ---------------------------------------------------------------------------
 try:
-    from api.services.report.summary_builder import build_summary_pdf
-    from api.services.report.case_package import build_case_zip, build_case_metadata_json
-except ImportError:
     from services.report.summary_builder import build_summary_pdf
     from services.report.case_package import build_case_zip, build_case_metadata_json
+except ImportError:
+    from api.services.report.summary_builder import build_summary_pdf
+    from api.services.report.case_package import build_case_zip, build_case_metadata_json
 
 @app.get("/cases/{case_id}", tags=["TruthLens Cases"])
 @app.get("/api/cases/{case_id}", tags=["TruthLens Cases"])

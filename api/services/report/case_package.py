@@ -6,8 +6,12 @@ import base64
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 
-from api.services.report.pdf_builder import build_pdf
-from api.services.report.summary_builder import build_summary_pdf
+try:
+    from .pdf_builder import build_pdf
+    from .summary_builder import build_summary_pdf
+except ImportError:
+    from services.report.pdf_builder import build_pdf
+    from services.report.summary_builder import build_summary_pdf
 
 
 def build_case_metadata_json(case) -> Dict[str, Any]:
