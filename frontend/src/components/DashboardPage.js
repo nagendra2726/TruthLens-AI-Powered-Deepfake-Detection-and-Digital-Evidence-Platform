@@ -90,7 +90,7 @@ export default function DashboardPage() {
       num: '04',
       title: 'Forensic Analysis',
       desc: 'Supporting image characteristics and pixel-level forensic indicators are examined.',
-      badge: 'Signal Fusion',
+      badge: 'Forensic Signals',
       visual: (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem', height: 110 }}>
           <div style={{ background: '#EFF6FF', borderRadius: 8, padding: '0.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>

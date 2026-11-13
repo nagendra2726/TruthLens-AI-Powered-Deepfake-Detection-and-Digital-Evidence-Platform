@@ -186,6 +186,7 @@ function AppRoutes() {
           </ProtectedRoute>
         } />
         <Route path="/reporting" element={<Navigate to="/help-reporting" replace />} />
+        <Route path="/help" element={<Navigate to="/help-reporting" replace />} />
 
         {/* Catch-all */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

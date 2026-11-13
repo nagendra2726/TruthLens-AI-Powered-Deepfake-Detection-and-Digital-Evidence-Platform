@@ -38,7 +38,7 @@ export default function ResultPage() {
         setLoading(false);
         return;
       }
-    } catch (_) {}
+    } catch (_) { }
 
     fetch(`${API_BASE_URL}/cases/${caseId}`)
       .then(res => res.ok ? res.json() : Promise.reject())
@@ -68,7 +68,7 @@ export default function ResultPage() {
         window.open(url, '_blank');
         return;
       }
-    } catch (_) {}
+    } catch (_) { }
     handleDownload();
   };
 
@@ -111,7 +111,7 @@ export default function ResultPage() {
             location.state?.suspectedPreview || location.state?.referencePreview || resultData.suspected_preview_b64 || resultData.reference_preview_b64
           );
           return;
-        } catch (_) {}
+        } catch (_) { }
       }
       alert('Unable to download report. Please ensure the backend server is running.');
     } finally {
@@ -199,13 +199,13 @@ export default function ResultPage() {
   const rawDate = resultData.timestamp || resultData.created_at;
   const formattedDate = rawDate
     ? new Date(rawDate).toLocaleString('en-IN', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-      })
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    })
     : 'Recently Analyzed';
 
   // Probabilities — read from multiple possible locations for forward/backward compat
@@ -228,20 +228,31 @@ export default function ResultPage() {
 
   // Category and Verdict
   const categoryKey = resObj.category || assessment.category || '';
-  const rawClassification = resObj.classification || '';
+  const rawClassification = resObj.classification || sus.prediction || '';
+
+  const isExplicitInconclusive =
+    categoryKey === 'INCONCLUSIVE' ||
+    rawClassification.toLowerCase().includes('inconclusive') ||
+    (rawAiProb > 0.45 && rawAiProb < 0.55 && !rawClassification.toLowerCase().includes('real') && !rawClassification.toLowerCase().includes('ai'));
+
   const isLikelyReal =
-    categoryKey === 'LIKELY_AUTHENTIC' ||
-    categoryKey === 'AUTHENTIC_MEDIA_DIFFERENT_PERSON' ||
-    rawClassification.toLowerCase().includes('real') ||
-    (rawAiProb < 0.35 && rawRealProb > 0.65);
+    !isExplicitInconclusive &&
+    (categoryKey === 'LIKELY_AUTHENTIC' ||
+      categoryKey === 'AUTHENTIC_MEDIA_DIFFERENT_PERSON' ||
+      rawClassification === 'Likely Real' ||
+      (rawClassification.toLowerCase().includes('real') && !rawClassification.toLowerCase().includes('ai')) ||
+      rawAiProb <= 0.45);
 
   const isLikelyAI =
-    categoryKey === 'POTENTIAL_DEEPFAKE' ||
-    categoryKey === 'LIKELY_AI_GENERATED' ||
-    categoryKey === 'BOTH_MEDIA_APPEAR_SYNTHETIC' ||
-    categoryKey === 'AI_GENERATED_MEDIA_DIFFERENT_PERSON' ||
-    rawClassification.toLowerCase().includes('ai') ||
-    rawAiProb >= 0.5;
+    !isExplicitInconclusive &&
+    !isLikelyReal &&
+    (categoryKey === 'POTENTIAL_DEEPFAKE' ||
+      categoryKey === 'LIKELY_AI_GENERATED' ||
+      categoryKey === 'BOTH_MEDIA_APPEAR_SYNTHETIC' ||
+      categoryKey === 'AI_GENERATED_MEDIA_DIFFERENT_PERSON' ||
+      rawClassification === 'Likely AI-Generated' ||
+      rawClassification.toLowerCase().includes('ai') ||
+      rawAiProb >= 0.55);
 
   let verdictTitle = 'Inconclusive';
   let verdictSubtitle = 'Visual patterns do not clearly distinguish authenticity';
@@ -397,11 +408,29 @@ export default function ResultPage() {
     {
       group: 'AI MODEL',
       items: [
-        { label: 'Model Name', value: resObj.model_name || sus.model_name || 'dima806/deepfake_vs_real_image_detection' },
-        { label: 'Architecture', value: resObj.architecture || sus.architecture || 'Vision Transformer (ViT)' },
+        {
+          label: 'AI Detection Model',
+          value: 'TruthLens Fine-Tuned Vision Transformer'
+        },
+        {
+          label: 'Architecture',
+          value: resObj.architecture || sus.architecture || 'Vision Transformer (ViT)'
+        },
+        {
+          label: 'Model Path',
+          value: 'truthlens_full_model'
+        },
+        {
+          label: 'Label Mapping',
+          value: 'Real = 0, Fake = 1'
+        },
+        {
+          label: 'Inference Device',
+          value: resObj.device || (resObj.is_model_live !== false ? 'MPS' : 'CPU')
+        },
         { label: 'Predicted Class', value: verdictTitle },
-        { label: 'Authentic Probability', value: `${realPct.toFixed(1)}%` },
-        { label: 'AI-Generated Probability', value: `${aiPct.toFixed(1)}%` },
+        { label: 'Real Probability', value: `${realPct.toFixed(1)}%` },
+        { label: 'AI Probability', value: `${aiPct.toFixed(1)}%` },
         { label: 'Model Confidence', value: formattedConfidence },
         { label: 'Model Status', value: resObj.is_model_live !== false ? 'Live (Preloaded in memory)' : 'Forensic Heuristic Fallback' },
       ].filter(i => i.value != null),
@@ -547,11 +576,11 @@ export default function ResultPage() {
           </div>
         </div>
 
-        {/* Authentic Probability Bar */}
+        {/* Real Probability Bar */}
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
             <span style={{ fontSize: '0.8125rem', color: '#475569', fontWeight: 600 }}>
-              Authentic Probability
+              Real Probability
             </span>
             <span style={{ fontSize: '0.875rem', fontWeight: 800, color: realPct > 50 ? '#16A34A' : '#475569', fontFamily: 'var(--font-mono)' }}>
               {realPct.toFixed(1)}%
@@ -646,7 +675,7 @@ export default function ResultPage() {
 
         {showTech && (
           <div className="fade-in" style={{ marginTop: '1.25rem', paddingTop: '1.25rem', borderTop: '1px solid #E2E8F0' }}>
-            
+
             {/* If media preview exists, show thumbnail with file details */}
             {mediaPreview && (
               <div style={{

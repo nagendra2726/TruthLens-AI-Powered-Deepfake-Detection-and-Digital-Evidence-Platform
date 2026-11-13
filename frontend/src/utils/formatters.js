@@ -89,6 +89,7 @@ export const getVerdictDetails = (isLikelyDeepfake, confidence) => {
  */
 export const getModelDisplayName = (modelId) => {
   const modelNames = {
+    'truthlens_full_model': 'TruthLens Fine-Tuned ViT',
     'npr_deepfakedetection': 'NPR DeepFake',
     'yermandy_clip_detection': 'Yermandy CLIP',
     'wavelet_clip_detection': 'Wavelet CLIP',

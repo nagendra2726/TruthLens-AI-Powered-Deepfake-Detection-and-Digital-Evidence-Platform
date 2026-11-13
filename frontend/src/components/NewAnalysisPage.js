@@ -48,7 +48,7 @@ const ScanOverlay = ({ steps, currentStep }) => (
 );
 
 // ── Upload Card ──────────────────────────────────────────
-const UploadCard = ({ label, description, file, preview, onChange, onRemove, accept, icon }) => {
+const UploadCard = ({ id, label, description, file, preview, onChange, onRemove, accept, icon }) => {
   const [drag, setDrag] = useState(false);
   const inputRef = useRef();
 
@@ -114,7 +114,7 @@ const UploadCard = ({ label, description, file, preview, onChange, onRemove, acc
       onKeyDown={e => e.key === 'Enter' && inputRef.current?.click()}
       aria-label={`Upload ${label}`}
     >
-      <input ref={inputRef} type="file" accept={accept} onChange={handleChange} style={{ display: 'none' }} />
+      <input id={id || 'file-upload-input'} data-testid={id || 'file-upload-input'} ref={inputRef} type="file" accept={accept} onChange={handleChange} style={{ display: 'none' }} />
       <div style={{ color: drag ? 'var(--blue)' : 'var(--text-faint)', marginBottom: '0.75rem' }}>
         {icon || <UploadCloud size={32} />}
       </div>
@@ -206,12 +206,30 @@ const NewAnalysisPage = ({ onAnalysisComplete }) => {
     form.append('file', singleFile);
     form.append('media_type', mediaType);
     try {
-      let res = await fetch(`${API_BASE_URL}/api/analyze`, { method: 'POST', body: form });
-      if (!res.ok && res.status === 404) {
-        res = await fetch(`${API_BASE_URL}/detect`, { method: 'POST', body: form });
+      let res;
+      try {
+        res = await fetch(`${API_BASE_URL}/api/analyze`, { method: 'POST', body: form });
+        if (!res.ok && res.status === 404) {
+          res = await fetch(`${API_BASE_URL}/detect`, { method: 'POST', body: form });
+        }
+      } catch (netErr) {
+        throw new Error('Unable to analyze the image. Please check that the backend is running and try again.');
       }
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail?.message || data.detail || 'Analysis failed. Please try again.');
+      let data = {};
+      try {
+        data = await res.json();
+      } catch (_) {}
+      if (!res.ok) {
+        let msg = data.detail?.message || data.detail;
+        if (!msg) {
+          if (res.status === 400) msg = 'Invalid image file or parameters. Please check your upload.';
+          else if (res.status === 413) msg = 'File too large. Maximum allowed size is 50MB.';
+          else if (res.status === 415) msg = 'Unable to process this image. Please upload a valid JPG, PNG, JPEG, or WEBP image.';
+          else if (res.status >= 500) msg = 'Server-side analysis error. Please try again.';
+          else msg = 'Analysis failed. Please try again.';
+        }
+        throw new Error(msg);
+      }
       clearInterval(timer);
       const caseId = data.case_id || `TL-${Date.now()}`;
       const verdict = data.result?.category || data.assessment?.category || (data.is_likely_deepfake ? 'POTENTIAL_DEEPFAKE' : 'LIKELY_AUTHENTIC');
@@ -236,7 +254,7 @@ const NewAnalysisPage = ({ onAnalysisComplete }) => {
           real_probability: realScore,
           confidence: conf,
           confidence_score: data.result?.confidence_score ?? null,
-          model_name: data.result?.model_name || 'dima806/deepfake_vs_real_image_detection',
+          model_name: data.result?.model_name || 'truthlens_full_model',
           architecture: data.result?.architecture || 'Vision Transformer (ViT)',
         },
         assessment: {
@@ -251,7 +269,7 @@ const NewAnalysisPage = ({ onAnalysisComplete }) => {
           ai_probability: aiScore,
           real_probability: realScore,
           confidence: conf,
-          model_name: data.result?.model_name || 'dima806/deepfake_vs_real_image_detection',
+          model_name: data.result?.model_name || 'truthlens_full_model',
           architecture: data.result?.architecture || 'Vision Transformer (ViT)',
         },
         image_analysis: data.image_analysis || null,
@@ -297,7 +315,11 @@ const NewAnalysisPage = ({ onAnalysisComplete }) => {
       navigate(`/history/${caseId}`, { state: { resultData } });
     } catch (err) {
       clearInterval(timer);
-      setError(err.message || 'Analysis could not be completed. Please try again.');
+      let msg = err.message || 'Analysis could not be completed. Please try again.';
+      if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('Load failed')) {
+        msg = 'Unable to analyze the image. Please check that the backend is running and try again.';
+      }
+      setError(msg);
       setAnalyzing(false);
     }
   };
@@ -311,9 +333,27 @@ const NewAnalysisPage = ({ onAnalysisComplete }) => {
     form.append('reference_media', refFile);
     form.append('suspected_media', susFile);
     try {
-      const res = await fetch(`${API_BASE_URL}/analyze/compare`, { method: 'POST', body: form });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail?.message || data.detail || 'Analysis failed. Please try again.');
+      let res;
+      try {
+        res = await fetch(`${API_BASE_URL}/analyze/compare`, { method: 'POST', body: form });
+      } catch (netErr) {
+        throw new Error('Unable to analyze the image. Please check that the backend is running and try again.');
+      }
+      let data = {};
+      try {
+        data = await res.json();
+      } catch (_) {}
+      if (!res.ok) {
+        let msg = data.detail?.message || data.detail;
+        if (!msg) {
+          if (res.status === 400) msg = 'Invalid image file or parameters. Please check your upload.';
+          else if (res.status === 413) msg = 'File too large. Maximum allowed size is 50MB.';
+          else if (res.status === 415) msg = 'Unable to process this image. Please upload a valid JPG, PNG, JPEG, or WEBP image.';
+          else if (res.status >= 500) msg = 'Server-side analysis error. Please try again.';
+          else msg = 'Analysis failed. Please try again.';
+        }
+        throw new Error(msg);
+      }
       clearInterval(timer);
       const caseId = data.case_id || `TL-${Date.now()}`;
       const verdict = data.assessment?.category || 'POTENTIAL_DEEPFAKE';
@@ -325,7 +365,11 @@ const NewAnalysisPage = ({ onAnalysisComplete }) => {
       navigate(`/history/${caseId}`, { state: { resultData: data, referencePreview: refPreview, suspectedPreview: susPreview } });
     } catch (err) {
       clearInterval(timer);
-      setError(err.message || 'Analysis could not be completed. Please try again.');
+      let msg = err.message || 'Analysis could not be completed. Please try again.';
+      if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('Load failed')) {
+        msg = 'Unable to analyze the image. Please check that the backend is running and try again.';
+      }
+      setError(msg);
       setAnalyzing(false);
     }
   };
@@ -383,6 +427,7 @@ const NewAnalysisPage = ({ onAnalysisComplete }) => {
               Upload an image, video, or audio file to analyze for AI-generated or manipulated content.
             </p>
             <UploadCard
+              id="single-media-upload"
               label="Upload media file"
               description="Drag & drop or choose a file — JPG, PNG, WEBP, MP4, WAV, MP3"
               file={singleFile}

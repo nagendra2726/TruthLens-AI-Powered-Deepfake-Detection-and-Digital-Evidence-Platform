@@ -8,3 +8,4 @@
 # Node & Build
 node_modules/
 build/
+.vercel

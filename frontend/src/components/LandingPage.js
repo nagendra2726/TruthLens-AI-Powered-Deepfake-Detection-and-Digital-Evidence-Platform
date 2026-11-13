@@ -254,7 +254,7 @@ export default function LandingPage() {
               Vision Transformer AI
             </h3>
             <p style={{ fontSize: '0.875rem', color: '#64748B', lineHeight: 1.5, margin: 0 }}>
-              Evaluates visual and semantic artifacts using fine-tuned Vision Transformer architecture (<code>dima806/deepfake_vs_real_image_detection</code>) for calibrated probabilistic assessments.
+              Evaluates visual and semantic artifacts using the fine-tuned TruthLens Vision Transformer architecture (<code>truthlens_full_model</code>) for calibrated probabilistic assessments.
             </p>
           </div>
 

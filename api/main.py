@@ -447,6 +447,8 @@ async def startup_event_api():
 _default_cors_origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:8000",
@@ -470,7 +472,7 @@ _allow_all_cors = "*" in _cors_origins or _allowed_origins_env == "*"
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"] if _allow_all_cors else _cors_origins,
-    allow_origin_regex=r"https://.*\.onrender\.com" if not _allow_all_cors else None,
+    allow_origin_regex=r"https://.*\.(onrender\.com|vercel\.app)" if not _allow_all_cors else None,
     allow_credentials=False if _allow_all_cors else True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -1397,6 +1399,54 @@ async def analyze_single_media_for_compare(
 
     base64_media = base64.b64encode(file_contents).decode("utf-8")
 
+    if media_type == "image":
+        try:
+            from api.services.ai_detector import get_ai_detector
+            detector = get_ai_detector()
+            pil_img = Image.open(io.BytesIO(file_contents)).convert("RGB")
+            ai_res = detector.predict_image(pil_img)
+
+            # Map to decision engine prediction tokens
+            if ai_res["classification"] == "Likely Real":
+                pred_token = "LIKELY_REAL"
+            elif ai_res["classification"] == "Likely AI-Generated":
+                pred_token = "LIKELY_AI_GENERATED"
+            else:
+                pred_token = "INCONCLUSIVE"
+
+            # Supporting forensics
+            from services.image_forensics.analyzer import ImageForensicsAnalyzer
+            pf_res = ImageForensicsAnalyzer.analyze_image(file_contents)
+
+            logger.info(
+                f"Request {req_id} [{role}]: TruthLens ViT inference complete on '{file.filename}'. "
+                f"Classification={ai_res['classification']} ({pred_token}), P(Fake)={ai_res['ai_probability']:.4f}"
+            )
+
+            auth_result = {
+                "ai_probability": ai_res["ai_probability"],
+                "real_probability": ai_res["real_probability"],
+                "prediction": pred_token,
+                "confidence": ai_res["confidence"],
+                "verdict": "fake" if pred_token == "LIKELY_AI_GENERATED" else ("real" if pred_token == "LIKELY_REAL" else "inconclusive"),
+                "model_name": "TruthLens Fine-Tuned Vision Transformer",
+                "architecture": "Vision Transformer (ViT)",
+                "pixel_forensics": pf_res.model_dump(),
+                "metadata_analysis": pf_res.metadata.model_dump() if hasattr(pf_res, "metadata") else {},
+                "model_results": {
+                    "TruthLens Fine-Tuned Vision Transformer": {
+                        "probability": ai_res["ai_probability"],
+                        "prediction": ai_res["classification"],
+                        "confidence": ai_res["confidence"],
+                        "model_name": "TruthLens Fine-Tuned Vision Transformer",
+                    }
+                },
+                "disclaimer": "AI-assisted screening using TruthLens Fine-Tuned Vision Transformer.",
+            }
+            return (auth_result, file_contents, media_type)
+        except Exception as e_live:
+            logger.warning(f"Request {req_id} [{role}]: Live TruthLens detector failed in compare: {e_live}")
+
     media_type_config = (
         ALL_MODEL_CONFIGS.get("media_types", {}) if ALL_MODEL_CONFIGS else {}
     ).get(media_type, {})
@@ -2220,27 +2270,27 @@ async def compare_media_authenticity(
     start_time = time.time()
 
     final_threshold: float = (
-        threshold
-        if threshold is not None
-        else (
+        float(threshold)
+        if threshold is not None and isinstance(threshold, (int, float))
+        else float(
             ALL_MODEL_CONFIGS.get("default_threshold", 0.5)
             if ALL_MODEL_CONFIGS
             else 0.5
         )
     )
     final_ensemble_method: str = (
-        ensemble_method
-        if ensemble_method is not None
-        else (
+        str(ensemble_method)
+        if ensemble_method is not None and isinstance(ensemble_method, str)
+        else str(
             ALL_MODEL_CONFIGS.get("default_ensemble_method", "average")
             if ALL_MODEL_CONFIGS
             else "average"
         )
     )
     final_face_threshold: float = (
-        face_threshold
-        if face_threshold is not None
-        else DEFAULT_VERIFICATION_THRESHOLD
+        float(face_threshold)
+        if face_threshold is not None and isinstance(face_threshold, (int, float))
+        else float(DEFAULT_VERIFICATION_THRESHOLD)
     )
 
     logger.info(
@@ -2487,19 +2537,20 @@ async def compare_media_authenticity(
 
             now_utc = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
+            detector = get_ai_detector()
             model_info = {
-                "ai_detection_models": ", ".join(
-                    ALL_MODEL_CONFIGS.get("media_types", {})
-                    .get("image", {})
-                    .get("model_endpoints", {}).keys()
-                ) or "N/A",
-                "ensemble_method": final_ensemble_method,
-                "threshold": str(final_threshold),
+                "ai_detection_model": "TruthLens Fine-Tuned Vision Transformer",
+                "architecture": "Vision Transformer (ViT)",
+                "model_path": "truthlens_full_model",
+                "full_model_path": getattr(detector, "model_name", "truthlens_full_model"),
+                "label_mapping": "Real = 0, Fake = 1",
+                "device": str(detector.device).upper(),
+                "threshold_ai": str(DEFAULT_AI_THRESHOLD),
+                "threshold_real": str(DEFAULT_REAL_THRESHOLD),
                 "face_detection_model": "MTCNN (facenet-pytorch)",
                 "face_embedding_model": "InceptionResnetV1 — VGGFace2",
                 "face_similarity_metric": "Cosine Similarity",
                 "face_threshold": str(final_face_threshold),
-                "decision_engine": "TruthLens Rule-Based Engine v1.0",
             }
 
             ev_case = build_case(
@@ -2631,6 +2682,7 @@ async def get_case_details_endpoint(case_id: str, db: Session = Depends(get_db))
     return JSONResponse(content=ev_case.to_dict())
 
 
+@app.post("/cases/{case_id}/generate", tags=["TruthLens Case File"])
 @app.post("/api/cases/{case_id}/generate", tags=["TruthLens Case File"])
 async def generate_case_file_endpoint(case_id: str, db: Session = Depends(get_db)):
     try:
@@ -2680,6 +2732,7 @@ async def download_case_summary_endpoint(case_id: str, db: Session = Depends(get
 
 
 @app.get("/reports/{case_id}/case-file/download", tags=["TruthLens Case File"])
+@app.get("/api/reports/{case_id}/case-file/download", tags=["TruthLens Case File"])
 async def download_case_file_endpoint(case_id: str, db: Session = Depends(get_db)):
     try:
         sanitize_case_id(case_id)
@@ -3153,6 +3206,9 @@ async def pipeline_analyse_endpoint(
             request=request,
             reference_media=reference,
             suspected_media=suspect,
+            threshold=0.5,
+            ensemble_method="average",
+            face_threshold=DEFAULT_VERIFICATION_THRESHOLD,
         )
         sus_res = result.get("suspected_analysis", {})
         face_res = result.get("face_verification", {})
@@ -3408,6 +3464,7 @@ async def truthlens_api_analyze_endpoint(
             "status": "success",
             "model_name": ai_result["model_name"],
             "architecture": ai_result["architecture"],
+            "image_analysis": forensics,
         },
         face_verification={
             "face_detected": face_analysis["face_detected"],
@@ -3425,10 +3482,15 @@ async def truthlens_api_analyze_endpoint(
             "disclaimer": "AI-assisted screening. Results may contain errors and should not be treated as definitive proof.",
         },
         model_info={
-            "ai_detection_model": ai_result["model_name"],
-            "architecture": ai_result["architecture"],
+            "ai_detection_model": "TruthLens Fine-Tuned Vision Transformer",
+            "architecture": ai_result.get("architecture", "Vision Transformer (ViT)"),
+            "model_path": "truthlens_full_model",
+            "full_model_path": ai_result.get("model_name", ""),
+            "label_mapping": "Real = 0, Fake = 1",
+            "device": str(detector.device).upper(),
             "threshold_ai": str(DEFAULT_AI_THRESHOLD),
             "threshold_real": str(DEFAULT_REAL_THRESHOLD),
+            "face_detection_model": "MTCNN (facenet-pytorch)",
         },
     )
     save_case(db, ev_case)

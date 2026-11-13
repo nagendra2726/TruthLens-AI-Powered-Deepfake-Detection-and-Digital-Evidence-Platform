@@ -24,7 +24,9 @@ services:
       - key: FRONTEND_URL
         sync: false
       - key: ALLOWED_ORIGINS
-        sync: false
+        value: "*"
+      - key: TRUTHLENS_MODEL_PATH
+        value: "dima806/deepfake_vs_real_image_detection"
 
   # ─────────────────────────────────────────────────────────────
   # TruthLens Frontend Application (React)

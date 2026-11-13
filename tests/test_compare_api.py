@@ -141,91 +141,134 @@ def test_compare_endpoint_both_real(sample_image_bytes):
 
 def test_compare_endpoint_ref_real_sus_ai(sample_image_bytes):
     """TEST 2: Reference = Real, Suspected = AI-generated."""
-    with patch("api.main.query_model_api") as mock_query:
-        call_count = 0
+    call_count = 0
 
-        def side_effect(model_name, media_type, encoded_media_content, threshold, req_id):
-            nonlocal call_count
-            call_count += 1
-            is_ref = call_count <= len(main.ALL_MODEL_CONFIGS["media_types"]["image"]["model_endpoints"])
-            return {
-                "model": model_name,
-                "probability": 0.08 if is_ref else 0.92,
-                "prediction": 0 if is_ref else 1,
-                "class": "real" if is_ref else "fake",
+    def mock_predict(self, img):
+        nonlocal call_count
+        call_count += 1
+        is_ref = (call_count == 1)
+        prob = 0.08 if is_ref else 0.92
+        return {
+            "classification": "Likely Real" if is_ref else "Likely AI-Generated",
+            "category": "LIKELY_AUTHENTIC" if is_ref else "POTENTIAL_DEEPFAKE",
+            "risk_level": "LOW" if is_ref else "HIGH",
+            "ai_probability": prob,
+            "real_probability": 1.0 - prob,
+            "confidence": "HIGH",
+            "confidence_score": 0.84,
+            "model_name": "truthlens_full_model",
+            "architecture": "Vision Transformer (ViT)",
+            "is_model_live": True,
+        }
+
+    with patch("api.services.ai_detector.TruthLensAIDetector.predict_image", new=mock_predict):
+        with patch("api.main.query_model_api") as mock_query:
+            mock_query.return_value = {
+                "model": "npr_deepfakedetection",
+                "probability": 0.08,
+                "prediction": 0,
+                "class": "real",
                 "inference_time": 0.1,
             }
-        mock_query.side_effect = side_effect
 
-        response = client.post(
-            "/analyze/compare",
-            files={
-                "reference_media": ("ref.jpg", sample_image_bytes, "image/jpeg"),
-                "suspected_media": ("sus.jpg", sample_image_bytes, "image/jpeg"),
-            },
-        )
+            response = client.post(
+                "/analyze/compare",
+                files={
+                    "reference_media": ("ref.jpg", sample_image_bytes, "image/jpeg"),
+                    "suspected_media": ("sus.jpg", sample_image_bytes, "image/jpeg"),
+                },
+            )
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["reference_analysis"]["prediction"] == "LIKELY_REAL"
-        assert data["suspected_analysis"]["prediction"] == "LIKELY_AI_GENERATED"
+            assert response.status_code == 200
+            data = response.json()
+            assert data["reference_analysis"]["prediction"] == "LIKELY_REAL"
+            assert data["suspected_analysis"]["prediction"] == "LIKELY_AI_GENERATED"
 
 
 def test_compare_endpoint_both_ai(sample_image_bytes):
     """TEST 3: Reference = AI-generated, Suspected = AI-generated."""
-    with patch("api.main.query_model_api") as mock_query:
-        mock_query.return_value = {
-            "model": "npr_deepfakedetection",
-            "probability": 0.88,
-            "prediction": 1,
-            "class": "fake",
-            "inference_time": 0.1,
+    def mock_predict(self, img):
+        return {
+            "classification": "Likely AI-Generated",
+            "category": "POTENTIAL_DEEPFAKE",
+            "risk_level": "HIGH",
+            "ai_probability": 0.88,
+            "real_probability": 0.12,
+            "confidence": "HIGH",
+            "confidence_score": 0.76,
+            "model_name": "truthlens_full_model",
+            "architecture": "Vision Transformer (ViT)",
+            "is_model_live": True,
         }
 
-        response = client.post(
-            "/analyze/compare",
-            files={
-                "reference_media": ("ref.jpg", sample_image_bytes, "image/jpeg"),
-                "suspected_media": ("sus.jpg", sample_image_bytes, "image/jpeg"),
-            },
-        )
+    with patch("api.services.ai_detector.TruthLensAIDetector.predict_image", new=mock_predict):
+        with patch("api.main.query_model_api") as mock_query:
+            mock_query.return_value = {
+                "model": "npr_deepfakedetection",
+                "probability": 0.88,
+                "prediction": 1,
+                "class": "fake",
+                "inference_time": 0.1,
+            }
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["reference_analysis"]["prediction"] == "LIKELY_AI_GENERATED"
-        assert data["suspected_analysis"]["prediction"] == "LIKELY_AI_GENERATED"
+            response = client.post(
+                "/analyze/compare",
+                files={
+                    "reference_media": ("ref.jpg", sample_image_bytes, "image/jpeg"),
+                    "suspected_media": ("sus.jpg", sample_image_bytes, "image/jpeg"),
+                },
+            )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["reference_analysis"]["prediction"] == "LIKELY_AI_GENERATED"
+            assert data["suspected_analysis"]["prediction"] == "LIKELY_AI_GENERATED"
 
 
 def test_compare_endpoint_ref_ai_sus_real(sample_image_bytes):
     """TEST 4: Reference = AI-generated, Suspected = Real."""
-    with patch("api.main.query_model_api") as mock_query:
-        call_count = 0
+    call_count = 0
 
-        def side_effect(model_name, media_type, encoded_media_content, threshold, req_id):
-            nonlocal call_count
-            call_count += 1
-            is_ref = call_count <= len(main.ALL_MODEL_CONFIGS["media_types"]["image"]["model_endpoints"])
-            return {
-                "model": model_name,
-                "probability": 0.91 if is_ref else 0.07,
-                "prediction": 1 if is_ref else 0,
-                "class": "fake" if is_ref else "real",
+    def mock_predict(self, img):
+        nonlocal call_count
+        call_count += 1
+        is_ref = (call_count == 1)
+        prob = 0.91 if is_ref else 0.07
+        return {
+            "classification": "Likely AI-Generated" if is_ref else "Likely Real",
+            "category": "POTENTIAL_DEEPFAKE" if is_ref else "LIKELY_AUTHENTIC",
+            "risk_level": "HIGH" if is_ref else "LOW",
+            "ai_probability": prob,
+            "real_probability": 1.0 - prob,
+            "confidence": "HIGH",
+            "confidence_score": 0.82,
+            "model_name": "truthlens_full_model",
+            "architecture": "Vision Transformer (ViT)",
+            "is_model_live": True,
+        }
+
+    with patch("api.services.ai_detector.TruthLensAIDetector.predict_image", new=mock_predict):
+        with patch("api.main.query_model_api") as mock_query:
+            mock_query.return_value = {
+                "model": "npr_deepfakedetection",
+                "probability": 0.07,
+                "prediction": 0,
+                "class": "real",
                 "inference_time": 0.1,
             }
-        mock_query.side_effect = side_effect
 
-        response = client.post(
-            "/analyze/compare",
-            files={
-                "reference_media": ("ref.jpg", sample_image_bytes, "image/jpeg"),
-                "suspected_media": ("sus.jpg", sample_image_bytes, "image/jpeg"),
-            },
-        )
+            response = client.post(
+                "/analyze/compare",
+                files={
+                    "reference_media": ("ref.jpg", sample_image_bytes, "image/jpeg"),
+                    "suspected_media": ("sus.jpg", sample_image_bytes, "image/jpeg"),
+                },
+            )
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["reference_analysis"]["prediction"] == "LIKELY_AI_GENERATED"
-        assert data["suspected_analysis"]["prediction"] == "LIKELY_REAL"
+            assert response.status_code == 200
+            data = response.json()
+            assert data["reference_analysis"]["prediction"] == "LIKELY_AI_GENERATED"
+            assert data["suspected_analysis"]["prediction"] == "LIKELY_REAL"
 
 
 def test_compare_endpoint_one_invalid_file(sample_image_bytes):
